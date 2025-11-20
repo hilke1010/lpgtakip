@@ -22,9 +22,7 @@ st.set_page_config(
 
 # --- 2. DOSYA İSİMLERİ ---
 SABIT_DOSYA_ADI = "lpg_veri.xlsx"
-WORD_GUNCEL = "satis.docx"       
-WORD_GECEN_YIL = "gecensene.docx" 
-# bionceki.docx SİLİNDİ
+WORD_DOSYA_ADI = "satis.docx"
 
 # --- 3. CSS ÖZELLEŞTİRME ---
 st.markdown("""
@@ -152,15 +150,13 @@ def load_word_tables_robust(file_path):
         return sehir_tablolari
 
     except Exception as e:
-        st.error(f"Word okuma hatası ({file_path}): {e}")
+        st.error(f"Word okuma hatası: {e}")
         return None
 
 def main():
     # --- VERİ ÇEKME ---
     df, target_date_col = load_data(SABIT_DOSYA_ADI)
-    
-    word_guncel = load_word_tables_robust(WORD_GUNCEL)
-    word_gecenyil = load_word_tables_robust(WORD_GECEN_YIL)
+    word_data = load_word_tables_robust(WORD_DOSYA_ADI)
     
     if df is None:
         st.error(f"❌ HATA: '{SABIT_DOSYA_ADI}' bulunamadı.")
@@ -203,15 +199,16 @@ def main():
     st.divider()
 
     # --- SEKMELER ---
-    tab_risk, tab_detay, tab_market, tab_trend, tab_epdk, tab_kiyas, tab_data = st.tabs([
-        "⚡ Sözleşme & Risk", "🔢 Detaylı Bayi", "🏢 Pazar & Rekabet", "📈 Zaman Analizi", "📄 EPDK Satış Raporu", "📊 Yıllık Kıyaslama", "📋 Ham Veri"
+    tab_risk, tab_detay, tab_market, tab_trend, tab_epdk, tab_data = st.tabs([
+        "⚡ Sözleşme & Risk", "🔢 Detaylı Bayi", "🏢 Pazar & Rekabet", "📈 Zaman Analizi", "📄 EPDK Satış Raporu", "📋 Ham Veri"
     ])
 
-    # 1. RİSK
+    # 1. RİSK TABLOSU
     with tab_risk:
         st.subheader("🚨 Kritik Sözleşmeler (İlk 6 Ay)")
         critical_df = df_filtered[df_filtered['Kalan_Gun'] < 180].sort_values('Kalan_Gun')
         critical_df.index = np.arange(1, len(critical_df) + 1)
+        
         if not critical_df.empty:
             critical_df['Bitis'] = critical_df[target_date_col].dt.strftime('%Y-%m-%d')
             st.dataframe(critical_df[['Unvan', 'İl', 'Dağıtım Şirketi', 'Bitis', 'Kalan_Gun', 'Risk_Durumu']], use_container_width=True)
@@ -225,31 +222,46 @@ def main():
             curr_year = datetime.date.today().year
             y_cnt = y_cnt[(y_cnt['Yıl'] >= curr_year) & (y_cnt['Yıl'] <= curr_year+10)]
             st.plotly_chart(px.bar(y_cnt, x='Yıl', y='Adet', text='Adet', color='Adet', color_continuous_scale='Oranges'), use_container_width=True)
+        
         with col_r2:
             risk_counts = df_filtered['Risk_Durumu'].value_counts().reset_index()
             risk_counts.columns = ['Durum', 'Adet']
-            st.plotly_chart(px.pie(risk_counts, values='Adet', names='Durum', hole=0.4, title="Risk Dağılımı",
-                                   color_discrete_map={"SÜRESİ DOLDU 🚨":"red", "KRİTİK (<3 Ay) ⚠️":"orange", "YAKLAŞIYOR (<6 Ay) ⏳": "#FFD700", "GÜVENLİ ✅":"green"}), use_container_width=True)
+            st.plotly_chart(
+                px.pie(risk_counts, values='Adet', names='Durum', hole=0.4, title="Risk Dağılımı",
+                       color_discrete_map={"SÜRESİ DOLDU 🚨":"red", "KRİTİK (<3 Ay) ⚠️":"orange", "YAKLAŞIYOR (<6 Ay) ⏳": "#FFD700", "GÜVENLİ ✅":"green"}), 
+                use_container_width=True
+            )
 
-    # 2. DETAY
+    # 2. DETAY (DÜZELTİLDİ: GRAFİK YUKARIDAN AŞAĞIYA DOĞRU SIRALANDI)
     with tab_detay:
         if not selected_companies:
+            # Senaryo 1: Şirket Seçili Değilse
             comp_stats = df_filtered['Dağıtım Şirketi'].value_counts().reset_index()
             comp_stats.columns = ['Şirket', 'Toplam Bayi']
             comp_stats.index = np.arange(1, len(comp_stats) + 1)
+            
             c_d1, c_d2 = st.columns(2)
-            with c_d1: st.dataframe(comp_stats, use_container_width=True, height=600)
+            with c_d1: 
+                # Tablo (Büyükten küçüğe)
+                st.dataframe(comp_stats, use_container_width=True, height=600)
             with c_d2: 
+                # Grafik (En Büyük En Üstte Olacak Şekilde)
                 fig_comp = px.bar(comp_stats.head(30), x='Toplam Bayi', y='Şirket', orientation='h', height=600, text='Toplam Bayi')
+                # "total ascending": Plotly yatay barda "toplam artan" dediğimizde, en küçüğü alta, en büyüğü üste koyar.
                 fig_comp.update_layout(yaxis={'categoryorder':'total ascending'})
                 st.plotly_chart(fig_comp, use_container_width=True)
         else:
+            # Senaryo 2: Şirket Seçiliyse
             city_stats = df_filtered['İl'].value_counts().reset_index()
             city_stats.columns = ['Şehir', 'Bayi Sayısı']
             city_stats.index = np.arange(1, len(city_stats) + 1)
+            
             c_d1, c_d2 = st.columns(2)
-            with c_d1: st.dataframe(city_stats, use_container_width=True, height=600)
+            with c_d1: 
+                # Tablo (Büyükten küçüğe)
+                st.dataframe(city_stats, use_container_width=True, height=600)
             with c_d2: 
+                # Grafik (En Büyük En Üstte Olacak Şekilde)
                 fig_city = px.bar(city_stats, x='Bayi Sayısı', y='Şehir', orientation='h', height=600, text='Bayi Sayısı')
                 fig_city.update_layout(yaxis={'categoryorder':'total ascending'})
                 st.plotly_chart(fig_city, use_container_width=True)
@@ -267,9 +279,19 @@ def main():
             fig.add_annotation(text=f"{tot}", x=0.5, y=0.5, font_size=20, showarrow=False)
             st.plotly_chart(fig, use_container_width=True)
 
-    # 4. ZAMAN
+    # 4. ZAMAN ANALİZİ (AÇIKLAMA EKLENDİ)
     with tab_trend:
-        st.subheader("📈 Yıllık Yeni Bayi Girişi")
+        st.subheader("📈 Yıllık Yeni Bayi Girişi ve Trendler")
+        
+        # Açıklama Metni
+        st.markdown("""
+        <div style="background-color: #e8f4f8; padding: 15px; border-radius: 5px; margin-bottom: 20px; border-left: 5px solid #3498db;">
+            <strong>ℹ️ Analiz Bilgisi:</strong><br>
+            Bu grafik, <strong>yıllara göre sisteme yeni katılan (lisans alan) bayi sayılarını</strong> göstermektedir. 
+            Pazarın hangi yıllarda hızlı büyüdüğünü veya durgunlaştığını, dağıtım şirketleri ile yapılan yeni sözleşme trendlerini buradan takip edebilirsiniz.
+        </div>
+        """, unsafe_allow_html=True)
+
         if 'Dağıtıcı ile Yapılan Sözleşme Başlangıç Tarihi' in df_filtered.columns:
             dy = df_filtered.copy()
             dy['Yil'] = dy['Dağıtıcı ile Yapılan Sözleşme Başlangıç Tarihi'].dt.year
@@ -279,96 +301,36 @@ def main():
 
     # 5. EPDK RAPORU
     with tab_epdk:
-        st.header("📄 EPDK Satış Raporu (Güncel Ay)")
-        if word_guncel:
-            sehirler = sorted(list(word_guncel.keys()))
-            secilen_il_word = st.selectbox("İl Seçin:", sehirler)
-            if secilen_il_word:
-                tablo_df = word_guncel[secilen_il_word]
-                st.markdown(f"### 📍 {secilen_il_word} Satış Tablosu")
-                tablo_df.index = np.arange(1, len(tablo_df) + 1)
-                try:
-                    st.dataframe(tablo_df.style.format(precision=2).background_gradient(cmap="Blues", subset=["Toplam Satış(ton)"]), use_container_width=True, height=600)
-                except:
-                    st.dataframe(tablo_df, use_container_width=True, height=600)
-        else: st.error("Güncel Word dosyası bulunamadı.")
-
-    # 6. ÜRÜN BAZLI KIYASLAMA (DÜZELTİLMİŞ)
-    with tab_kiyas:
-        st.header("📊 Ürün Bazlı Kıyaslama (Bu Yıl vs Geçen Yıl)")
-        st.info("Sadece Otogaz, Tüplü ve Dökme ürünleri. (Bi Önceki Ay Çıkarıldı)")
-
-        if word_guncel:
-            sehirler_kiyas = sorted(list(word_guncel.keys()))
-            secilen_il_kiyas = st.selectbox("Kıyaslama İçin İl Seçin:", sehirler_kiyas, index=0)
-
-            if secilen_il_kiyas:
-                df_guncel = word_guncel.get(secilen_il_kiyas)
-                df_gecenyil = word_gecenyil.get(secilen_il_kiyas) if word_gecenyil else None
-
-                if df_guncel is not None:
-                    cols_map = {
-                        "Lisans Sahibinin Unvanı": "Firma",
-                        "Otogaz Satış(ton)": "Otogaz_Ton", "Otogaz Pay(%)": "Otogaz_Pay",
-                        "Tüplü Satış(ton)": "Tüplü_Ton", "Tüplü Pay(%)": "Tüplü_Pay",
-                        "Dökme Satış(ton)": "Dökme_Ton", "Dökme Pay(%)": "Dökme_Pay"
-                    }
+        st.header("📄 EPDK Satış Raporları (Word)")
+        
+        if word_data:
+            sehirler = sorted(list(word_data.keys()))
+            if not sehirler:
+                st.warning("Word dosyasında 'Tablo X: Şehir' formatı bulunamadı.")
+            else:
+                secilen_il_word = st.selectbox("Raporlanacak İli Seçin:", sehirler)
+                if secilen_il_word:
+                    tablo_df = word_data[secilen_il_word]
+                    st.markdown(f"### 📍 {secilen_il_word} İli LPG Satış Tablosu")
                     
-                    # --- GÜNCEL VERİ ---
-                    base_df = df_guncel[list(cols_map.keys())].copy()
-                    # HATA DÜZELTME: Önce isimleri değiştiriyoruz, sonra erişiyoruz
-                    base_df.columns = ["Firma"] + [f"{v}_G" for k,v in cols_map.items() if k != "Lisans Sahibinin Unvanı"]
-                    # Şimdi "Firma" sütunu var, boşluk temizliği yapabiliriz
-                    base_df["Firma"] = base_df["Firma"].astype(str).str.strip()
-
-                    # --- GEÇEN YIL VERİ ---
-                    if df_gecenyil is not None:
-                        temp_last = df_gecenyil[list(cols_map.keys())].copy()
-                        # Önce isimleri değiştiriyoruz
-                        temp_last.columns = ["Firma"] + [f"{v}_Y" for k,v in cols_map.items() if k != "Lisans Sahibinin Unvanı"]
-                        # Şimdi "Firma" sütunu var, temizlik yapıyoruz
-                        temp_last["Firma"] = temp_last["Firma"].astype(str).str.strip()
+                    # İndeksi 1'den başlat
+                    tablo_df.index = np.arange(1, len(tablo_df) + 1)
+                    
+                    try:
+                        st.dataframe(
+                            tablo_df.style.format(precision=2).background_gradient(cmap="Blues", subset=["Toplam Satış(ton)"]),
+                            use_container_width=True, height=600
+                        )
+                    except:
+                        st.dataframe(tablo_df, use_container_width=True, height=600)
                         
-                        base_df = pd.merge(base_df, temp_last, on="Firma", how="left")
-                    else:
-                        for k,v in cols_map.items():
-                            if k != "Lisans Sahibinin Unvanı": base_df[f"{v}_Y"] = 0
-                    
-                    base_df = base_df.fillna(0)
-
-                    # Satır Sıralama
-                    toplam_row = base_df[base_df["Firma"] == "TOPLAM"]
-                    main_rows = base_df[base_df["Firma"] != "TOPLAM"].sort_values("Otogaz_Ton_G", ascending=False)
-                    final_df = pd.concat([main_rows, toplam_row])
-                    final_df.set_index("Firma", inplace=True)
-
-                    # Sütun Sıralaması (Sadece G ve Y)
-                    ordered_cols = []
-                    for cat in ["Otogaz", "Tüplü", "Dökme"]:
-                        for period in ["_G", "_Y"]:
-                            ordered_cols.append(f"{cat}_Ton{period}")
-                            ordered_cols.append(f"{cat}_Pay{period}")
-                    
-                    final_df = final_df[ordered_cols]
-                    
-                    new_cols = []
-                    for col in ordered_cols:
-                        parts = col.split('_')
-                        cat = parts[0]
-                        tip = "Ton" if "Ton" in parts[1] else "%"
-                        suffix = parts[-1]
-                        per = "Güncel" if "G" in suffix else "Geçen Yıl"
-                        new_cols.append(f"{cat} {tip} ({per})")
-                    
-                    final_df.columns = new_cols
-
-                    st.markdown(f"### {secilen_il_kiyas} Satış Karşılaştırması")
-                    st.dataframe(final_df.style.format("{:.2f}"), use_container_width=True, height=600)
-
+                    if "Toplam Satış(ton)" in tablo_df.columns and "Lisans Sahibinin Unvanı" in tablo_df.columns:
+                        gd = tablo_df[tablo_df["Lisans Sahibinin Unvanı"] != "TOPLAM"].sort_values("Toplam Satış(ton)", ascending=True).tail(15)
+                        st.plotly_chart(px.bar(gd, x="Toplam Satış(ton)", y="Lisans Sahibinin Unvanı", orientation='h', text="Toplam Satış(ton)", title="En Çok Satış Yapanlar"), use_container_width=True)
         else:
-            st.error("Güncel Word dosyası eksik.")
+            st.error("Word dosyası okunamadı.")
 
-    # 7. HAM VERİ
+    # 6. HAM VERİ
     with tab_data:
         st.dataframe(df_filtered, use_container_width=True)
 
