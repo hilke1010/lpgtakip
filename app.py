@@ -232,7 +232,7 @@ def main():
                 use_container_width=True
             )
 
-    # 2. DETAY (GÜNCELLENDİ: SIRALAMA DÜZELTİLDİ)
+    # 2. DETAY (DÜZELTİLDİ: GRAFİK YUKARIDAN AŞAĞIYA DOĞRU SIRALANDI)
     with tab_detay:
         if not selected_companies:
             # Senaryo 1: Şirket Seçili Değilse
@@ -241,24 +241,29 @@ def main():
             comp_stats.index = np.arange(1, len(comp_stats) + 1)
             
             c_d1, c_d2 = st.columns(2)
-            with c_d1: st.dataframe(comp_stats, use_container_width=True, height=600)
+            with c_d1: 
+                # Tablo (Büyükten küçüğe)
+                st.dataframe(comp_stats, use_container_width=True, height=600)
             with c_d2: 
-                # EKSEN TERS ÇEVRİLDİ: autorange="reversed"
+                # Grafik (En Büyük En Üstte Olacak Şekilde)
                 fig_comp = px.bar(comp_stats.head(30), x='Toplam Bayi', y='Şirket', orientation='h', height=600, text='Toplam Bayi')
-                fig_comp.update_layout(yaxis=dict(autorange="reversed")) 
+                # "total ascending": Plotly yatay barda "toplam artan" dediğimizde, en küçüğü alta, en büyüğü üste koyar.
+                fig_comp.update_layout(yaxis={'categoryorder':'total ascending'})
                 st.plotly_chart(fig_comp, use_container_width=True)
         else:
-            # Senaryo 2: Şirket Seçiliyse (Senin Screenshot'ın olduğu yer)
+            # Senaryo 2: Şirket Seçiliyse
             city_stats = df_filtered['İl'].value_counts().reset_index()
             city_stats.columns = ['Şehir', 'Bayi Sayısı']
             city_stats.index = np.arange(1, len(city_stats) + 1)
             
             c_d1, c_d2 = st.columns(2)
-            with c_d1: st.dataframe(city_stats, use_container_width=True, height=600)
+            with c_d1: 
+                # Tablo (Büyükten küçüğe)
+                st.dataframe(city_stats, use_container_width=True, height=600)
             with c_d2: 
-                # EKSEN TERS ÇEVRİLDİ: autorange="reversed"
+                # Grafik (En Büyük En Üstte Olacak Şekilde)
                 fig_city = px.bar(city_stats, x='Bayi Sayısı', y='Şehir', orientation='h', height=600, text='Bayi Sayısı')
-                fig_city.update_layout(yaxis=dict(autorange="reversed")) 
+                fig_city.update_layout(yaxis={'categoryorder':'total ascending'})
                 st.plotly_chart(fig_city, use_container_width=True)
 
     # 3. PAZAR
@@ -274,8 +279,19 @@ def main():
             fig.add_annotation(text=f"{tot}", x=0.5, y=0.5, font_size=20, showarrow=False)
             st.plotly_chart(fig, use_container_width=True)
 
-    # 4. ZAMAN
+    # 4. ZAMAN ANALİZİ (AÇIKLAMA EKLENDİ)
     with tab_trend:
+        st.subheader("📈 Yıllık Yeni Bayi Girişi ve Trendler")
+        
+        # Açıklama Metni
+        st.markdown("""
+        <div style="background-color: #e8f4f8; padding: 15px; border-radius: 5px; margin-bottom: 20px; border-left: 5px solid #3498db;">
+            <strong>ℹ️ Analiz Bilgisi:</strong><br>
+            Bu grafik, <strong>yıllara göre sisteme yeni katılan (lisans alan) bayi sayılarını</strong> göstermektedir. 
+            Pazarın hangi yıllarda hızlı büyüdüğünü veya durgunlaştığını, dağıtım şirketleri ile yapılan yeni sözleşme trendlerini buradan takip edebilirsiniz.
+        </div>
+        """, unsafe_allow_html=True)
+
         if 'Dağıtıcı ile Yapılan Sözleşme Başlangıç Tarihi' in df_filtered.columns:
             dy = df_filtered.copy()
             dy['Yil'] = dy['Dağıtıcı ile Yapılan Sözleşme Başlangıç Tarihi'].dt.year
