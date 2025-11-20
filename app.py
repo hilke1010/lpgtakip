@@ -74,7 +74,7 @@ def load_data(file_path):
     except Exception as e:
         st.error(f"Excel okuma hatası: {e}"); return None, None
 
-# --- 5. GELİŞMİŞ WORD OKUYUCU (SIRALI OKUMA) ---
+# --- 5. GELİŞMİŞ WORD OKUYUCU (ADANA DÜZELTMESİ DAHİL) ---
 def iter_block_items(parent):
     if isinstance(parent, _Document):
         parent_elm = parent.element.body
@@ -112,12 +112,20 @@ def load_word_tables_robust(file_path):
                 if current_city:
                     data = []
                     for row in block.rows:
-                        row_data = [cell.text.strip() for cell in row.cells]
+                        # DÜZELTME BURADA: Birleştirilmiş hücreleri (Merged Cells) tekilleştiriyoruz
+                        row_data = []
+                        seen_cells = set() # Aynı hücreyi tekrar okumamak için takip listesi
+                        
+                        for cell in row.cells:
+                            if id(cell) not in seen_cells: # Eğer bu hücre daha önce bu satırda işlenmediyse
+                                row_data.append(cell.text.strip())
+                                seen_cells.add(id(cell))
+                        
+                        # Boş satırları atla
                         if not any(row_data): continue
                         data.append(row_data)
                     
                     if len(data) > 3:
-                        # Başlıklar
                         headers = [
                             "Lisans Sahibinin Unvanı", 
                             "Tüplü Satış(ton)", "Tüplü Pay(%)",
@@ -126,17 +134,23 @@ def load_word_tables_robust(file_path):
                             "Toplam Satış(ton)", "Toplam Pay(%)"
                         ]
                         
-                        # Veri kısmını al (Genelde 3. satırdan başlar)
-                        # Ancak tablo yapısına göre dinamik davranalım
-                        body_data = data[2:] 
-                        
-                        # Sütun sayısı kontrolü
-                        if data and len(data[0]) == 9:
-                            df_table = pd.DataFrame(body_data, columns=headers)
-                        else:
-                            df_table = pd.DataFrame(body_data)
-                            if df_table.shape[1] == 9: df_table.columns = headers
+                        # Veriyi al (Başlıkları atla)
+                        # Adana gibi karmaşık tablolarda bazen fazladan boş sütun algılanabilir.
+                        # Biz sadece İLK 9 SÜTUNU alacağız.
+                        cleaned_body = []
+                        for r in data[2:]:
+                            # Eğer satır 9 sütundan uzunsa kırp, kısaysa olduğu gibi bırak
+                            if len(r) >= 9:
+                                cleaned_body.append(r[:9])
+                            else:
+                                cleaned_body.append(r)
 
+                        df_table = pd.DataFrame(cleaned_body)
+                        
+                        # Eğer sütun sayısı 9 ise başlıkları bas, değilse zorlama
+                        if df_table.shape[1] == 9:
+                            df_table.columns = headers
+                        
                         # Sayısal Temizlik
                         for col in df_table.columns:
                             if "Satış" in str(col) or "Pay" in str(col):
@@ -204,13 +218,17 @@ def main():
         "⚡ Sözleşme & Risk", "🔢 Detaylı Bayi", "🏢 Pazar & Rekabet", "📈 Zaman Analizi", "📄 EPDK Satış Raporu", "📋 Ham Veri"
     ])
 
-    # 1. RİSK TABLOSU (DÜZELTİLDİ)
+    # 1. RİSK TABLOSU
     with tab_risk:
         st.subheader("🚨 Kritik Sözleşmeler (İlk 6 Ay)")
         critical_df = df_filtered[df_filtered['Kalan_Gun'] < 180].sort_values('Kalan_Gun')
+        
+        # İndeksi 1'den başlat
+        critical_df.index = np.arange(1, len(critical_df) + 1)
+        
         if not critical_df.empty:
             critical_df['Bitis'] = critical_df[target_date_col].dt.strftime('%Y-%m-%d')
-            st.dataframe(critical_df[['Unvan', 'İl', 'Dağıtım Şirketi', 'Bitis', 'Kalan_Gun', 'Risk_Durumu']], use_container_width=True, hide_index=True)
+            st.dataframe(critical_df[['Unvan', 'İl', 'Dağıtım Şirketi', 'Bitis', 'Kalan_Gun', 'Risk_Durumu']], use_container_width=True)
         else: st.success("Riskli sözleşme yok.")
         
         col_r1, col_r2 = st.columns(2)
@@ -222,13 +240,9 @@ def main():
             y_cnt = y_cnt[(y_cnt['Yıl'] >= curr_year) & (y_cnt['Yıl'] <= curr_year+10)]
             st.plotly_chart(px.bar(y_cnt, x='Yıl', y='Adet', text='Adet', color='Adet', color_continuous_scale='Oranges'), use_container_width=True)
         
-        # --- HATA VEREN KISIM DÜZELTİLDİ ---
         with col_r2:
-            # value_counts().reset_index() işlemi Pandas sürümüne göre farklı kolon ismi veriyor.
-            # Bu yüzden kolon isimlerini elle sabitliyoruz.
             risk_counts = df_filtered['Risk_Durumu'].value_counts().reset_index()
-            risk_counts.columns = ['Durum', 'Adet'] # Kolon isimlerini garantiledik
-            
+            risk_counts.columns = ['Durum', 'Adet']
             st.plotly_chart(
                 px.pie(risk_counts, values='Adet', names='Durum', hole=0.4, title="Risk Dağılımı",
                        color_discrete_map={"SÜRESİ DOLDU 🚨":"red", "KRİTİK (<3 Ay) ⚠️":"orange", "YAKLAŞIYOR (<6 Ay) ⏳": "#FFD700", "GÜVENLİ ✅":"green"}), 
@@ -240,14 +254,19 @@ def main():
         if not selected_companies:
             comp_stats = df_filtered['Dağıtım Şirketi'].value_counts().reset_index()
             comp_stats.columns = ['Şirket', 'Toplam Bayi']
+            # İndeksi 1'den başlat
+            comp_stats.index = np.arange(1, len(comp_stats) + 1)
+            
             c_d1, c_d2 = st.columns(2)
-            with c_d1: st.dataframe(comp_stats, use_container_width=True, height=600, hide_index=True)
+            with c_d1: st.dataframe(comp_stats, use_container_width=True, height=600)
             with c_d2: st.plotly_chart(px.bar(comp_stats.head(30), x='Toplam Bayi', y='Şirket', orientation='h', height=600), use_container_width=True)
         else:
             city_stats = df_filtered['İl'].value_counts().reset_index()
             city_stats.columns = ['Şehir', 'Bayi Sayısı']
+            city_stats.index = np.arange(1, len(city_stats) + 1)
+            
             c_d1, c_d2 = st.columns(2)
-            with c_d1: st.dataframe(city_stats, use_container_width=True, height=600, hide_index=True)
+            with c_d1: st.dataframe(city_stats, use_container_width=True, height=600)
             with c_d2: st.plotly_chart(px.bar(city_stats, x='Bayi Sayısı', y='Şehir', orientation='h', height=600), use_container_width=True)
 
     # 3. PAZAR
@@ -272,10 +291,10 @@ def main():
             yg.columns=['Yıl','Yeni Bayi']
             st.plotly_chart(px.line(yg[yg['Yıl']>=2000], x='Yıl', y='Yeni Bayi', markers=True), use_container_width=True)
 
-    # 5. EPDK RAPORU
+    # 5. EPDK RAPORU (ADANA VE SIRA NO DÜZELTİLDİ)
     with tab_epdk:
         st.header("📄 EPDK Satış Raporları (Word)")
-        st.info("Veriler Word dosyasından sıralı okunarak çekilmiştir.")
+        st.info("Veriler Word dosyasından çekilmiştir.")
         
         if word_data:
             sehirler = sorted(list(word_data.keys()))
@@ -287,6 +306,9 @@ def main():
                     tablo_df = word_data[secilen_il_word]
                     
                     st.markdown(f"### 📍 {secilen_il_word} İli LPG Satış Tablosu")
+                    
+                    # SIRA NUMARASINI 1'DEN BAŞLAT
+                    tablo_df.index = np.arange(1, len(tablo_df) + 1)
                     
                     try:
                         st.dataframe(
