@@ -21,11 +21,10 @@ st.set_page_config(
 )
 
 # --- 2. DOSYA İSİMLERİ ---
-# Dosyalar GitHub'da bu isimlerle olmalı
 SABIT_DOSYA_ADI = "lpg_veri.xlsx"
-WORD_GUNCEL = "satis.docx"       # Örn: Eylül 2025
-WORD_ONCEKI = "bionceki.docx"    # Örn: Ağustos 2025
-WORD_GECEN_YIL = "gecensene.docx" # Örn: Eylül 2024
+WORD_GUNCEL = "satis.docx"       # Eylül 2025 (Güncel)
+WORD_ONCEKI = "bionceki.docx"    # Ağustos 2025 (Bir Önceki Ay)
+WORD_GECEN_YIL = "gecensene.docx" # Eylül 2024 (Geçen Sene)
 
 # --- 3. CSS ÖZELLEŞTİRME ---
 st.markdown("""
@@ -160,7 +159,7 @@ def main():
     # --- VERİ ÇEKME ---
     df, target_date_col = load_data(SABIT_DOSYA_ADI)
     
-    # Üç farklı Word dosyasını okuyoruz
+    # 3 Dosyayı da oku
     word_guncel = load_word_tables_robust(WORD_GUNCEL)
     word_onceki = load_word_tables_robust(WORD_ONCEKI)
     word_gecenyil = load_word_tables_robust(WORD_GECEN_YIL)
@@ -205,12 +204,11 @@ def main():
     c4.metric("Ort. Kalan Gün", f"{df_filtered['Kalan_Gun'].mean():.0f}")
     st.divider()
 
-    # --- SEKMELER (YENİ SEKME EKLENDİ: PERFORMANS KIYASLAMA) ---
-    tab_risk, tab_detay, tab_market, tab_trend, tab_kiyas, tab_data = st.tabs([
-        "⚡ Sözleşme & Risk", "🔢 Detaylı Bayi", "🏢 Pazar & Rekabet", "📈 Zaman Analizi", "📊 Performans Kıyaslama (Yeni)", "📋 Ham Veri"
+    # --- SEKMELER ---
+    # YENİ SEKME: "📊 Kıyaslama" eklendi
+    tab_risk, tab_detay, tab_market, tab_trend, tab_epdk, tab_kiyas, tab_data = st.tabs([
+        "⚡ Sözleşme & Risk", "🔢 Detaylı Bayi", "🏢 Pazar & Rekabet", "📈 Zaman Analizi", "📄 EPDK Satış Raporu", "📊 Kıyaslama", "📋 Ham Veri"
     ])
-
-    # ... (Diğer sekmeler aynı kalacak, sadece YENİ SEKME ekliyorum) ...
 
     # 1. RİSK TABLOSU
     with tab_risk:
@@ -235,8 +233,11 @@ def main():
         with col_r2:
             risk_counts = df_filtered['Risk_Durumu'].value_counts().reset_index()
             risk_counts.columns = ['Durum', 'Adet']
-            st.plotly_chart(px.pie(risk_counts, values='Adet', names='Durum', hole=0.4, title="Risk Dağılımı",
-                                   color_discrete_map={"SÜRESİ DOLDU 🚨":"red", "KRİTİK (<3 Ay) ⚠️":"orange", "YAKLAŞIYOR (<6 Ay) ⏳": "#FFD700", "GÜVENLİ ✅":"green"}), use_container_width=True)
+            st.plotly_chart(
+                px.pie(risk_counts, values='Adet', names='Durum', hole=0.4, title="Risk Dağılımı",
+                       color_discrete_map={"SÜRESİ DOLDU 🚨":"red", "KRİTİK (<3 Ay) ⚠️":"orange", "YAKLAŞIYOR (<6 Ay) ⏳": "#FFD700", "GÜVENLİ ✅":"green"}), 
+                use_container_width=True
+            )
 
     # 2. DETAY
     with tab_detay:
@@ -276,7 +277,7 @@ def main():
 
     # 4. ZAMAN
     with tab_trend:
-        st.subheader("📈 Yıllık Yeni Bayi Girişi")
+        st.subheader("📈 Yıllık Yeni Bayi Girişi ve Trendler")
         st.markdown("""
         <div style="background-color: #e8f4f8; padding: 15px; border-radius: 5px; margin-bottom: 20px; border-left: 5px solid #3498db;">
             <strong>ℹ️ Analiz Bilgisi:</strong> Bu grafik, yıllara göre sisteme yeni katılan bayi sayılarını göstermektedir.
@@ -289,96 +290,85 @@ def main():
             yg.columns=['Yıl','Yeni Bayi']
             st.plotly_chart(px.line(yg[yg['Yıl']>=2000], x='Yıl', y='Yeni Bayi', markers=True), use_container_width=True)
 
-    # 5. PERFORMANS KIYASLAMA (YENİ VE EN ÖNEMLİ KISIM)
-    with tab_kiyas:
-        st.header("📊 Dönemsel Satış Kıyaslama Raporu")
-        st.info("3 farklı Word dosyasındaki veriler Şirket Bazında eşleştirilerek farklar hesaplanmıştır.")
+    # 5. EPDK RAPORU (Sadece Güncel Ay)
+    with tab_epdk:
+        st.header("📄 EPDK Satış Raporu (Güncel)")
         
         if word_guncel:
             sehirler = sorted(list(word_guncel.keys()))
-            secilen_il_kiyas = st.selectbox("Kıyaslama Yapılacak İli Seçin:", sehirler, index=0)
-            
+            secilen_il_word = st.selectbox("İl Seçin:", sehirler)
+            if secilen_il_word:
+                tablo_df = word_guncel[secilen_il_word]
+                st.markdown(f"### 📍 {secilen_il_word} İli LPG Satış Tablosu (Eylül 2025)")
+                tablo_df.index = np.arange(1, len(tablo_df) + 1)
+                try:
+                    st.dataframe(
+                        tablo_df.style.format(precision=2).background_gradient(cmap="Blues", subset=["Toplam Satış(ton)"]),
+                        use_container_width=True, height=600
+                    )
+                except:
+                    st.dataframe(tablo_df, use_container_width=True, height=600)
+        else:
+            st.error(f"'{WORD_GUNCEL}' dosyası bulunamadı.")
+
+    # 6. KIYASLAMA (YAN YANA SÜTUNLAR - FARKI ÇIKARMA YOK)
+    with tab_kiyas:
+        st.header("📊 Geçmiş Dönem Kıyaslama Tablosu")
+        st.info("Şirketlerin Güncel, Bir Önceki Ay ve Geçen Yıl aynı dönemdeki satışları yan yana listelenmiştir.")
+
+        if word_guncel:
+            sehirler_kiyas = sorted(list(word_guncel.keys()))
+            secilen_il_kiyas = st.selectbox("Kıyaslama İçin İl Seçin:", sehirler_kiyas, index=0)
+
             if secilen_il_kiyas:
-                # 1. ÜÇ FARKLI VERİYİ ÇEK
                 df_guncel = word_guncel.get(secilen_il_kiyas)
                 df_onceki = word_onceki.get(secilen_il_kiyas) if word_onceki else None
                 df_gecenyil = word_gecenyil.get(secilen_il_kiyas) if word_gecenyil else None
-                
+
                 if df_guncel is not None:
-                    # Gerekli Sütunları Al ve Yeniden Adlandır (Karmaşıklığı önlemek için)
-                    cols_needed = ["Lisans Sahibinin Unvanı", "Toplam Satış(ton)", "Toplam Pay(%)"]
-                    
-                    # Güncel Tablo
+                    # İhtiyacımız olan sütunlar
+                    cols_needed = ["Lisans Sahibinin Unvanı", "Toplam Satış(ton)"]
+
+                    # 1. Güncel
                     base_df = df_guncel[cols_needed].copy()
-                    base_df.columns = ["Firma", "Satis_Guncel", "Pay_Guncel"]
-                    
-                    # Önceki Ay Tablosu (Varsa)
+                    base_df.columns = ["Firma", "Satış (Güncel)"]
+
+                    # 2. Önceki Ay
                     if df_onceki is not None:
                         temp_prev = df_onceki[cols_needed].copy()
-                        temp_prev.columns = ["Firma", "Satis_Onceki", "Pay_Onceki"]
-                        # Firmaya göre birleştir (Merge)
+                        temp_prev.columns = ["Firma", "Satış (Önceki Ay)"]
                         base_df = pd.merge(base_df, temp_prev, on="Firma", how="left")
                     else:
-                        base_df["Satis_Onceki"] = 0
-                        base_df["Pay_Onceki"] = 0
+                        base_df["Satış (Önceki Ay)"] = 0
 
-                    # Geçen Yıl Tablosu (Varsa)
+                    # 3. Geçen Yıl
                     if df_gecenyil is not None:
                         temp_last = df_gecenyil[cols_needed].copy()
-                        temp_last.columns = ["Firma", "Satis_GecenYil", "Pay_GecenYil"]
-                        # Firmaya göre birleştir
+                        temp_last.columns = ["Firma", "Satış (Geçen Yıl)"]
                         base_df = pd.merge(base_df, temp_last, on="Firma", how="left")
                     else:
-                        base_df["Satis_GecenYil"] = 0
-                        base_df["Pay_GecenYil"] = 0
+                        base_df["Satış (Geçen Yıl)"] = 0
                     
-                    # NaN değerleri 0 yap
+                    # NaN olanları 0 yap
                     base_df = base_df.fillna(0)
-                    
-                    # --- HESAPLAMALAR ---
-                    base_df["Fark (Önceki Ay)"] = base_df["Satis_Guncel"] - base_df["Satis_Onceki"]
-                    base_df["Fark (Geçen Yıl)"] = base_df["Satis_Guncel"] - base_df["Satis_GecenYil"]
-                    
-                    # TOPLAM Satırını ayıralım (Listenin en altında dursun)
+
+                    # Toplam satırını en alta at
                     toplam_row = base_df[base_df["Firma"] == "TOPLAM"]
-                    main_rows = base_df[base_df["Firma"] != "TOPLAM"].sort_values("Satis_Guncel", ascending=False)
-                    final_kiyas_df = pd.concat([main_rows, toplam_row])
+                    main_rows = base_df[base_df["Firma"] != "TOPLAM"].sort_values("Satış (Güncel)", ascending=False)
+                    final_df = pd.concat([main_rows, toplam_row])
                     
-                    # Tabloyu Gösterim İçin Düzenle
-                    display_df = final_kiyas_df[[
-                        "Firma", 
-                        "Satis_Guncel", "Fark (Önceki Ay)", "Fark (Geçen Yıl)", 
-                        "Pay_Guncel"
-                    ]].copy()
-                    
-                    # İndeks düzelt
-                    display_df.index = np.arange(1, len(display_df) + 1)
+                    final_df.index = np.arange(1, len(final_df) + 1)
 
-                    # Renklendirme Fonksiyonu
-                    def color_diff(val):
-                        if val > 0:
-                            return 'color: green; font-weight: bold'
-                        elif val < 0:
-                            return 'color: red; font-weight: bold'
-                        else:
-                            return 'color: gray'
-
-                    st.markdown(f"### 📊 {secilen_il_kiyas} Satış Performans Analizi")
+                    st.markdown(f"### {secilen_il_kiyas} Satış Karşılaştırması (Ton)")
                     st.dataframe(
-                        display_df.style.format({
-                            "Satis_Guncel": "{:.2f}",
-                            "Fark (Önceki Ay)": "{:+.2f}",
-                            "Fark (Geçen Yıl)": "{:+.2f}",
-                            "Pay_Guncel": "{:.2f}%"
-                        }).applymap(color_diff, subset=["Fark (Önceki Ay)", "Fark (Geçen Yıl)"]),
+                        final_df.style.format(precision=2),
                         use_container_width=True,
                         height=600
                     )
-                    
         else:
-            st.error(f"Güncel Word dosyası ({WORD_GUNCEL}) okunamadı.")
+            st.error("Güncel Word dosyası eksik.")
 
-    # 6. HAM VERİ
+    # 7. HAM VERİ
     with tab_data:
         st.dataframe(df_filtered, use_container_width=True)
 
