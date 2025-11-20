@@ -74,7 +74,7 @@ def load_data(file_path):
     except Exception as e:
         st.error(f"Excel okuma hatası: {e}"); return None, None
 
-# --- 5. GELİŞMİŞ WORD OKUYUCU (ADANA DÜZELTMESİ DAHİL) ---
+# --- 5. GELİŞMİŞ WORD OKUYUCU ---
 def iter_block_items(parent):
     if isinstance(parent, _Document):
         parent_elm = parent.element.body
@@ -112,16 +112,12 @@ def load_word_tables_robust(file_path):
                 if current_city:
                     data = []
                     for row in block.rows:
-                        # DÜZELTME BURADA: Birleştirilmiş hücreleri (Merged Cells) tekilleştiriyoruz
                         row_data = []
-                        seen_cells = set() # Aynı hücreyi tekrar okumamak için takip listesi
-                        
+                        seen_cells = set()
                         for cell in row.cells:
-                            if id(cell) not in seen_cells: # Eğer bu hücre daha önce bu satırda işlenmediyse
+                            if id(cell) not in seen_cells:
                                 row_data.append(cell.text.strip())
                                 seen_cells.add(id(cell))
-                        
-                        # Boş satırları atla
                         if not any(row_data): continue
                         data.append(row_data)
                     
@@ -133,25 +129,14 @@ def load_word_tables_robust(file_path):
                             "Otogaz Satış(ton)", "Otogaz Pay(%)",
                             "Toplam Satış(ton)", "Toplam Pay(%)"
                         ]
-                        
-                        # Veriyi al (Başlıkları atla)
-                        # Adana gibi karmaşık tablolarda bazen fazladan boş sütun algılanabilir.
-                        # Biz sadece İLK 9 SÜTUNU alacağız.
                         cleaned_body = []
                         for r in data[2:]:
-                            # Eğer satır 9 sütundan uzunsa kırp, kısaysa olduğu gibi bırak
-                            if len(r) >= 9:
-                                cleaned_body.append(r[:9])
-                            else:
-                                cleaned_body.append(r)
+                            if len(r) >= 9: cleaned_body.append(r[:9])
+                            else: cleaned_body.append(r)
 
                         df_table = pd.DataFrame(cleaned_body)
+                        if df_table.shape[1] == 9: df_table.columns = headers
                         
-                        # Eğer sütun sayısı 9 ise başlıkları bas, değilse zorlama
-                        if df_table.shape[1] == 9:
-                            df_table.columns = headers
-                        
-                        # Sayısal Temizlik
                         for col in df_table.columns:
                             if "Satış" in str(col) or "Pay" in str(col):
                                 try:
@@ -222,8 +207,6 @@ def main():
     with tab_risk:
         st.subheader("🚨 Kritik Sözleşmeler (İlk 6 Ay)")
         critical_df = df_filtered[df_filtered['Kalan_Gun'] < 180].sort_values('Kalan_Gun')
-        
-        # İndeksi 1'den başlat
         critical_df.index = np.arange(1, len(critical_df) + 1)
         
         if not critical_df.empty:
@@ -249,25 +232,34 @@ def main():
                 use_container_width=True
             )
 
-    # 2. DETAY
+    # 2. DETAY (GÜNCELLENDİ: SIRALAMA DÜZELTİLDİ)
     with tab_detay:
         if not selected_companies:
+            # Senaryo 1: Şirket Seçili Değilse
             comp_stats = df_filtered['Dağıtım Şirketi'].value_counts().reset_index()
             comp_stats.columns = ['Şirket', 'Toplam Bayi']
-            # İndeksi 1'den başlat
             comp_stats.index = np.arange(1, len(comp_stats) + 1)
             
             c_d1, c_d2 = st.columns(2)
             with c_d1: st.dataframe(comp_stats, use_container_width=True, height=600)
-            with c_d2: st.plotly_chart(px.bar(comp_stats.head(30), x='Toplam Bayi', y='Şirket', orientation='h', height=600), use_container_width=True)
+            with c_d2: 
+                # EKSEN TERS ÇEVRİLDİ: autorange="reversed"
+                fig_comp = px.bar(comp_stats.head(30), x='Toplam Bayi', y='Şirket', orientation='h', height=600, text='Toplam Bayi')
+                fig_comp.update_layout(yaxis=dict(autorange="reversed")) 
+                st.plotly_chart(fig_comp, use_container_width=True)
         else:
+            # Senaryo 2: Şirket Seçiliyse (Senin Screenshot'ın olduğu yer)
             city_stats = df_filtered['İl'].value_counts().reset_index()
             city_stats.columns = ['Şehir', 'Bayi Sayısı']
             city_stats.index = np.arange(1, len(city_stats) + 1)
             
             c_d1, c_d2 = st.columns(2)
             with c_d1: st.dataframe(city_stats, use_container_width=True, height=600)
-            with c_d2: st.plotly_chart(px.bar(city_stats, x='Bayi Sayısı', y='Şehir', orientation='h', height=600), use_container_width=True)
+            with c_d2: 
+                # EKSEN TERS ÇEVRİLDİ: autorange="reversed"
+                fig_city = px.bar(city_stats, x='Bayi Sayısı', y='Şehir', orientation='h', height=600, text='Bayi Sayısı')
+                fig_city.update_layout(yaxis=dict(autorange="reversed")) 
+                st.plotly_chart(fig_city, use_container_width=True)
 
     # 3. PAZAR
     with tab_market:
@@ -291,10 +283,9 @@ def main():
             yg.columns=['Yıl','Yeni Bayi']
             st.plotly_chart(px.line(yg[yg['Yıl']>=2000], x='Yıl', y='Yeni Bayi', markers=True), use_container_width=True)
 
-    # 5. EPDK RAPORU (ADANA VE SIRA NO DÜZELTİLDİ)
+    # 5. EPDK RAPORU
     with tab_epdk:
         st.header("📄 EPDK Satış Raporları (Word)")
-        st.info("Veriler Word dosyasından çekilmiştir.")
         
         if word_data:
             sehirler = sorted(list(word_data.keys()))
@@ -304,10 +295,9 @@ def main():
                 secilen_il_word = st.selectbox("Raporlanacak İli Seçin:", sehirler)
                 if secilen_il_word:
                     tablo_df = word_data[secilen_il_word]
-                    
                     st.markdown(f"### 📍 {secilen_il_word} İli LPG Satış Tablosu")
                     
-                    # SIRA NUMARASINI 1'DEN BAŞLAT
+                    # İndeksi 1'den başlat
                     tablo_df.index = np.arange(1, len(tablo_df) + 1)
                     
                     try:
