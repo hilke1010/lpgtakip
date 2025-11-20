@@ -145,7 +145,6 @@ def main():
     st.divider()
 
     # --- SEKMELER ---
-    # NOT: Coğrafi Analiz kaldırıldı, yerine Detaylı Bayi Sayıları geldi
     tab_risk, tab_detay, tab_market, tab_trend, tab_data = st.tabs([
         "⚡ Sözleşme & Risk", 
         "🔢 Detaylı Bayi Sayıları", 
@@ -192,86 +191,105 @@ def main():
                                   color_discrete_map={"SÜRESİ DOLDU 🚨":"red", "KRİTİK (<3 Ay) ⚠️":"orange", "YAKLAŞIYOR (<6 Ay) ⏳": "#FFD700", "GÜVENLİ ✅":"green"}), use_container_width=True)
 
     # =================================================
-    # TAB 2: DETAYLI BAYİ SAYILARI (YENİ EKLENEN KISIM)
+    # TAB 2: DETAYLI BAYİ SAYILARI
     # =================================================
     with tab_detay:
-        # Senaryo kontrolü: Kullanıcı sol menüden şirket seçti mi?
-        
         if not selected_companies:
-            # SENARYO 1: Şirket seçilmedi -> TÜM ŞİRKETLERİ LİSTELE
             st.subheader("🏢 Tüm Dağıtım Şirketleri ve Bayi Sayıları")
             st.info("Sol menüden belirli bir şirket seçerek o şirketin şehir dağılımını görebilirsiniz.")
-            
-            # Veriyi hazırla
             comp_stats = df_filtered['Dağıtım Şirketi'].value_counts().reset_index()
             comp_stats.columns = ['Dağıtım Şirketi', 'Toplam Bayi Sayısı']
-            
             col_d1, col_d2 = st.columns([1, 1])
-            
             with col_d1:
-                # Uzun bir tablo (Scroll edilebilir)
-                st.dataframe(
-                    comp_stats, 
-                    use_container_width=True, 
-                    height=600, # Tabloyu uzun tuttum ki hepsi görünsün
-                    hide_index=True,
-                    column_config={
-                        "Dağıtım Şirketi": st.column_config.TextColumn("Şirket Adı", width="large"),
-                        "Toplam Bayi Sayısı": st.column_config.NumberColumn("Bayi Sayısı", format="%d")
-                    }
-                )
-                
+                st.dataframe(comp_stats, use_container_width=True, height=600, hide_index=True,
+                             column_config={"Dağıtım Şirketi": st.column_config.TextColumn("Şirket Adı", width="large"), "Toplam Bayi Sayısı": st.column_config.NumberColumn("Bayi Sayısı", format="%d")})
             with col_d2:
-                # Görsel olarak ilk 30'u gösterelim ki grafik patlamasın (ama tablo hepsini gösteriyor)
                 st.write("**Grafiksel Gösterim (İlk 30 Şirket)**")
-                fig_bar = px.bar(comp_stats.head(30), x='Toplam Bayi Sayısı', y='Dağıtım Şirketi', 
-                                 text='Toplam Bayi Sayısı', orientation='h', height=600)
+                fig_bar = px.bar(comp_stats.head(30), x='Toplam Bayi Sayısı', y='Dağıtım Şirketi', text='Toplam Bayi Sayısı', orientation='h', height=600)
                 fig_bar.update_layout(yaxis={'categoryorder':'total ascending'})
                 st.plotly_chart(fig_bar, use_container_width=True)
-
         else:
-            # SENARYO 2: Şirket seçildi -> O ŞİRKETİN ŞEHİR DAĞILIMINI LİSTELE
             st.subheader(f"📍 Seçilen Şirketlerin Şehir Dağılımı")
-            st.success(f"Şu an filtrelenen şirketler: {', '.join(selected_companies)}")
-            
-            # Şehir bazlı grupla
+            st.success(f"Filtrelenen: {', '.join(selected_companies)}")
             city_stats = df_filtered['İl'].value_counts().reset_index()
             city_stats.columns = ['Şehir', 'Bayi Sayısı']
-            
             col_d1, col_d2 = st.columns([1, 1])
-            
             with col_d1:
-                st.dataframe(
-                    city_stats, 
-                    use_container_width=True, 
-                    height=600,
-                    hide_index=True
-                )
-            
+                st.dataframe(city_stats, use_container_width=True, height=600, hide_index=True)
             with col_d2:
                 st.write("**Grafiksel Dağılım**")
-                fig_bar_city = px.bar(city_stats, x='Bayi Sayısı', y='Şehir', 
-                                      text='Bayi Sayısı', orientation='h', height=600)
+                fig_bar_city = px.bar(city_stats, x='Bayi Sayısı', y='Şehir', text='Bayi Sayısı', orientation='h', height=600)
                 fig_bar_city.update_layout(yaxis={'categoryorder':'total ascending'})
                 st.plotly_chart(fig_bar_city, use_container_width=True)
 
     # =================================================
-    # TAB 3: PAZAR & REKABET
+    # TAB 3: PAZAR & REKABET (GÜNCELLENEN KISIM)
     # =================================================
     with tab_market:
         c_tree, c_pie = st.columns([2, 1])
+        
         with c_tree:
-            st.subheader("Pazar Hakimiyet Haritası")
-            st.plotly_chart(px.treemap(df_filtered, path=['Dağıtım Şirketi', 'İl'], color='Dağıtım Şirketi'), use_container_width=True)
+            st.subheader("Pazar Hakimiyet Haritası (Treemap)")
+            st.markdown("Kutucukların büyüklüğü şirketlerin pazar payını gösterir.")
+            # Treemap renklendirmesini daha iyi yapalım
+            st.plotly_chart(px.treemap(df_filtered, path=['Dağıtım Şirketi', 'İl'], 
+                                      color='Dağıtım Şirketi', color_discrete_sequence=px.colors.qualitative.Set3), use_container_width=True)
+        
         with c_pie:
-            st.subheader("Pazar Payı")
+            st.subheader("🍰 Pazar Payı (%'lik Dağılım)")
+            
+            # Veriyi Hazırla
             comp_counts = df_filtered['Dağıtım Şirketi'].value_counts().reset_index()
             comp_counts.columns = ['Şirket', 'Adet']
+            
+            total_bayi = comp_counts['Adet'].sum()
+            
+            # İlk 10'u al, gerisini "Diğerleri" yap
             if len(comp_counts) > 10:
                 top_10 = comp_counts.iloc[:10]
-                others = pd.DataFrame({'Şirket': ['DİĞERLERİ'], 'Adet': [comp_counts.iloc[10:]['Adet'].sum()]})
-                comp_counts = pd.concat([top_10, others], ignore_index=True)
-            st.plotly_chart(px.pie(comp_counts, values='Adet', names='Şirket', hole=0.4), use_container_width=True)
+                other_val = comp_counts.iloc[10:]['Adet'].sum()
+                other_row = pd.DataFrame({'Şirket': ['DİĞERLERİ'], 'Adet': [other_val]})
+                comp_counts = pd.concat([top_10, other_row], ignore_index=True)
+            
+            # Pasta (Donut) Grafiği
+            fig_pie = px.pie(
+                comp_counts, 
+                values='Adet', 
+                names='Şirket', 
+                hole=0.5, # Ortasını deldik (Donut)
+                color_discrete_sequence=px.colors.qualitative.Set3 # Profesyonel renkler
+            )
+            
+            # Grafiğin içine yazı ve yüzde ekleme
+            fig_pie.update_traces(
+                textposition='inside', 
+                textinfo='percent+label', # Hem yüzde hem isim yazsın
+                textfont_size=13,
+                marker=dict(line=dict(color='#000000', width=1)) # İnce siyah kenarlık
+            )
+            
+            # Ortaya Toplam Sayı Yazma
+            fig_pie.add_annotation(
+                text=f"{total_bayi}",
+                x=0.5, y=0.5,
+                font_size=24,
+                showarrow=False,
+                font_weight='bold'
+            )
+            fig_pie.add_annotation(
+                text="TOPLAM",
+                x=0.5, y=0.4,
+                font_size=12,
+                showarrow=False
+            )
+            
+            # Legend (Açıklama) kutusunu alta alalım ki grafik büyük görünsün
+            fig_pie.update_layout(
+                showlegend=True,
+                legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5)
+            )
+            
+            st.plotly_chart(fig_pie, use_container_width=True)
 
     # =================================================
     # TAB 4: ZAMAN ANALİZİ
