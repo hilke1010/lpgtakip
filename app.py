@@ -16,37 +16,6 @@ st.set_page_config(
 # --- 2. SABİT VE KONFİGÜRASYON ---
 SABIT_DOSYA_ADI = "lpg_veri.xlsx"
 
-# Türkiye İl Merkez Koordinatları (Harita İçin)
-IL_KOORDINATLARI = {
-    'ADANA': [37.0000, 35.3213], 'ADIYAMAN': [37.7648, 38.2786], 'AFYONKARAHİSAR': [38.7507, 30.5567],
-    'AĞRI': [39.7191, 43.0503], 'AKSARAY': [38.3687, 34.0370], 'AMASYA': [40.6499, 35.8353],
-    'ANKARA': [39.9334, 32.8597], 'ANTALYA': [36.8969, 30.7133], 'ARDAHAN': [41.1105, 42.7022],
-    'ARTVİN': [41.1828, 41.8183], 'AYDIN': [37.8560, 27.8416], 'BALIKESİR': [39.6484, 27.8826],
-    'BARTIN': [41.6344, 32.3375], 'BATMAN': [37.8812, 41.1351], 'BAYBURT': [40.2552, 40.2249],
-    'BİLECİK': [40.1451, 29.9798], 'BİNGÖL': [38.8854, 40.498], 'BİTLİS': [38.3938, 42.1232],
-    'BOLU': [40.7392, 31.6089], 'BURDUR': [37.7204, 30.2908], 'BURSA': [40.1885, 29.0610],
-    'ÇANAKKALE': [40.1553, 26.4142], 'ÇANKIRI': [40.6013, 33.6134], 'ÇORUM': [40.5506, 34.9556],
-    'DENİZLİ': [37.7765, 29.0864], 'DİYARBAKIR': [37.9144, 40.2306], 'DÜZCE': [40.8438, 31.1565],
-    'EDİRNE': [41.6771, 26.5557], 'ELAZIĞ': [38.6810, 39.2264], 'ERZİNCAN': [39.7500, 39.5000],
-    'ERZURUM': [39.9000, 41.2700], 'ESKİŞEHİR': [39.7767, 30.5206], 'GAZİANTEP': [37.0662, 37.3833],
-    'GİRESUN': [40.9128, 38.3895], 'GÜMÜŞHANE': [40.4600, 39.4700], 'HAKKARİ': [37.5833, 43.7333],
-    'HATAY': [36.4018, 36.3498], 'IĞDIR': [39.9167, 44.0333], 'ISPARTA': [37.7648, 30.5566],
-    'İSTANBUL': [41.0082, 28.9784], 'İZMİR': [38.4192, 27.1287], 'KAHRAMANMARAŞ': [37.5858, 36.9371],
-    'KARABÜK': [41.2061, 32.6204], 'KARAMAN': [37.1759, 33.2287], 'KARS': [40.6167, 43.1000],
-    'KASTAMONU': [41.3887, 33.7827], 'KAYSERİ': [38.7312, 35.4787], 'KIRIKKALE': [39.8468, 33.5153],
-    'KIRKLARELİ': [41.7333, 27.2167], 'KIRŞEHİR': [39.1425, 34.1709], 'KİLİS': [36.7184, 37.1212],
-    'KOCAELİ': [40.8533, 29.8815], 'KONYA': [37.8667, 32.4833], 'KÜTAHYA': [39.4167, 29.9833],
-    'MALATYA': [38.3552, 38.3095], 'MANİSA': [38.6191, 27.4289], 'MARDİN': [37.3212, 40.7245],
-    'MERSİN': [36.8000, 34.6333], 'MUĞLA': [37.2153, 28.3636], 'MUŞ': [38.9462, 41.7539],
-    'NEVŞEHİR': [38.6939, 34.6857], 'NİĞDE': [37.9667, 34.6833], 'ORDU': [40.9839, 37.8764],
-    'OSMANİYE': [37.0742, 36.2476], 'RİZE': [41.0201, 40.5234], 'SAKARYA': [40.7569, 30.3783],
-    'SAMSUN': [41.2867, 36.3300], 'SİİRT': [37.9333, 41.9500], 'SİNOP': [42.0231, 35.1531],
-    'SİVAS': [39.7477, 37.0179], 'ŞANLIURFA': [37.1591, 38.7969], 'ŞIRNAK': [37.5164, 42.4611],
-    'TEKİRDAĞ': [40.9833, 27.5167], 'TOKAT': [40.3167, 36.5500], 'TRABZON': [41.0027, 39.7168],
-    'TUNCELİ': [39.1079, 39.5401], 'UŞAK': [38.6823, 29.4082], 'VAN': [38.4891, 43.4089],
-    'YALOVA': [40.6500, 29.2667], 'YOZGAT': [39.8181, 34.8147], 'ZONGULDAK': [41.4564, 31.7987]
-}
-
 # --- 3. CSS ÖZELLEŞTİRME ---
 st.markdown("""
 <style>
@@ -71,10 +40,8 @@ def load_data(file_path):
     
     try:
         df = pd.read_excel(file_path)
-        # Sütun isimlerini temizle
         df.columns = [c.strip() for c in df.columns]
         
-        # Tarih Sütunları
         date_cols = [
             'Lisans Başlangıç Tarihi', 'Lisans Bitiş Tarihi',
             'Dağıtıcı ile Yapılan Sözleşme Başlangıç Tarihi',
@@ -84,19 +51,16 @@ def load_data(file_path):
             if col in df.columns:
                 df[col] = pd.to_datetime(df[col], dayfirst=True, errors='coerce')
 
-        # Ana Hedef Tarih
         target_col = 'Dağıtıcı ile Yapılan Sözleşme Bitiş Tarihi'
         if target_col not in df.columns:
             target_col = 'Lisans Bitiş Tarihi'
         
-        # Kalan Gün Hesabı
         today = pd.to_datetime(datetime.date.today())
         if target_col in df.columns:
             df['Kalan_Gun'] = (df[target_col] - today).dt.days
         else:
             df['Kalan_Gun'] = np.nan
 
-        # Risk Kategorileri
         def get_risk(days):
             if pd.isna(days): return "Bilinmiyor"
             if days < 0: return "SÜRESİ DOLDU 🚨"
@@ -106,7 +70,6 @@ def load_data(file_path):
 
         df['Risk_Durumu'] = df['Kalan_Gun'].apply(get_risk)
         
-        # İl ve İlçe düzenleme
         if 'İl' in df.columns:
             df['İl'] = df['İl'].astype(str).str.upper().str.replace('i', 'İ').str.replace('ı', 'I')
         if 'İlçe' in df.columns:
@@ -123,24 +86,22 @@ def main():
     df, target_date_col = load_data(SABIT_DOSYA_ADI)
     
     if df is None:
-        st.error(f"❌ HATA: '{SABIT_DOSYA_ADI}' dosyası bulunamadı. Lütfen Excel dosyasını GitHub'a yüklediğinden emin ol.")
+        st.error(f"❌ HATA: '{SABIT_DOSYA_ADI}' dosyası bulunamadı.")
         st.stop()
 
     # --- SIDEBAR FİLTRELERİ ---
     with st.sidebar:
         st.title("🔍 Filtre Paneli")
-        st.markdown("Verileri daraltmak için aşağıdakileri kullanın.")
         
         # 1. İl Filtresi
         all_cities = sorted(df['İl'].unique().tolist())
         selected_cities = st.multiselect("🏢 Şehir Seç", all_cities)
         
-        # 2. İlçe Filtresi (İl seçimine göre dinamik değişir)
+        # 2. İlçe Filtresi
         if selected_cities:
             filtered_districts = sorted(df[df['İl'].isin(selected_cities)]['İlçe'].unique().tolist())
         else:
             filtered_districts = sorted(df['İlçe'].unique().tolist())
-        
         selected_districts = st.multiselect("📍 İlçe Seç", filtered_districts)
 
         # 3. Şirket Filtresi
@@ -153,7 +114,7 @@ def main():
 
         st.info(f"Toplam Kayıt: {len(df)}")
 
-    # --- FİLTRE UYGULAMA MOTORU ---
+    # --- FİLTRE UYGULAMA ---
     df_filtered = df.copy()
     if selected_cities:
         df_filtered = df_filtered[df_filtered['İl'].isin(selected_cities)]
@@ -166,14 +127,12 @@ def main():
 
     # --- ANA EKRAN ---
     st.title("🚀 Otogaz (LPG) Pazar & Risk Analizi")
-    st.markdown(f"**Veri Kaynağı:** EPDK Lisans Veritabanı | **Son Güncelleme:** {datetime.date.today().strftime('%d.%m.%Y')}")
-
+    
     # KPI KARTLARI
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Toplam İstasyon", f"{len(df_filtered):,}")
     with col2:
-        # Burada sadece < 90 gün olanları 'Riskli' olarak sayıyoruz ama tabloda hepsini göstereceğiz
         riskli_sayi = len(df_filtered[df_filtered['Kalan_Gun'] < 90])
         st.metric("Acil Sözleşme (<90 Gün)", riskli_sayi, delta="Acil Aksiyon", delta_color="inverse")
     with col3:
@@ -186,160 +145,152 @@ def main():
     st.divider()
 
     # --- SEKMELER ---
-    tab_risk, tab_geo, tab_market, tab_trend, tab_data = st.tabs([
+    # NOT: Coğrafi Analiz kaldırıldı, yerine Detaylı Bayi Sayıları geldi
+    tab_risk, tab_detay, tab_market, tab_trend, tab_data = st.tabs([
         "⚡ Sözleşme & Risk", 
-        "🗺️ Coğrafi Analiz", 
+        "🔢 Detaylı Bayi Sayıları", 
         "🏢 Pazar & Rekabet", 
         "📈 Zaman Analizi",
         "📋 Ham Veri"
     ])
 
     # =================================================
-    # TAB 1: RİSK ANALİZİ (GÜNCELLENDİ: 6 AYLIK SÜRE)
+    # TAB 1: RİSK ANALİZİ
     # =================================================
     with tab_risk:
         st.subheader("🚨 Kritik ve Yaklaşan Sözleşmeler (İlk 6 Ay)")
-        st.info("Bu tablo sözleşme süresi bitmiş, 3 aydan az kalmış ve 6 aydan az kalmış (Yaklaşan) bayileri listeler.")
-        
-        # DÜZELTME: Filtreyi 180 güne (6 Ay) çıkardık
         critical_df = df_filtered[df_filtered['Kalan_Gun'] < 180].sort_values('Kalan_Gun')
         
         if not critical_df.empty:
             critical_df['Bitis_Tarih_Str'] = critical_df[target_date_col].dt.strftime('%Y-%m-%d')
-            
             st.dataframe(
                 critical_df[['Unvan', 'İl', 'İlçe', 'Dağıtım Şirketi', 'Bitis_Tarih_Str', 'Kalan_Gun', 'Risk_Durumu']],
                 use_container_width=True,
                 hide_index=True,
                 column_config={
                     "Unvan": st.column_config.TextColumn("Bayi Adı", width="large"),
-                    "Risk_Durumu": st.column_config.TextColumn("Durum", width="medium"),
-                    "Kalan_Gun": st.column_config.ProgressColumn(
-                        "Kalan Gün", format="%d Gün", min_value=0, max_value=180 # Max değeri 180 yaptık ki bar düzgün çalışsın
-                    ),
+                    "Kalan_Gun": st.column_config.ProgressColumn("Kalan Gün", format="%d Gün", min_value=0, max_value=180),
                     "Bitis_Tarih_Str": "Bitiş Tarihi"
                 }
             )
         else:
-            st.success("Seçilen kriterlere göre önümüzdeki 6 ay (180 gün) içinde bitecek sözleşme bulunmuyor.")
+            st.success("Önümüzdeki 180 gün içinde bitecek sözleşme bulunmuyor.")
 
-        st.write("---")
-        
         c1, c2 = st.columns(2)
         with c1:
-            st.subheader("Yıllara Göre Sözleşme Bitişleri")
             df_filtered['Bitis_Yili'] = df_filtered[target_date_col].dt.year
             year_counts = df_filtered['Bitis_Yili'].value_counts().sort_index().reset_index()
             year_counts.columns = ['Yıl', 'Adet']
-            
             curr_year = datetime.date.today().year
             year_counts = year_counts[(year_counts['Yıl'] >= curr_year) & (year_counts['Yıl'] <= curr_year + 10)]
-            
-            fig_bar = px.bar(year_counts, x='Yıl', y='Adet', text='Adet', color='Adet', color_continuous_scale='Oranges')
-            st.plotly_chart(fig_bar, use_container_width=True)
+            st.plotly_chart(px.bar(year_counts, x='Yıl', y='Adet', text='Adet', color='Adet', title="Yıllara Göre Bitişler", color_continuous_scale='Oranges'), use_container_width=True)
             
         with c2:
-            st.subheader("Genel Risk Dağılımı")
             risk_counts = df_filtered['Risk_Durumu'].value_counts().reset_index()
             risk_counts.columns = ['Durum', 'Adet']
-            fig_pie_risk = px.pie(risk_counts, values='Adet', names='Durum', hole=0.4, 
-                                  color_discrete_map={"SÜRESİ DOLDU 🚨":"red", "KRİTİK (<3 Ay) ⚠️":"orange", "YAKLAŞIYOR (<6 Ay) ⏳": "#FFD700", "GÜVENLİ ✅":"green"})
-            st.plotly_chart(fig_pie_risk, use_container_width=True)
+            st.plotly_chart(px.pie(risk_counts, values='Adet', names='Durum', hole=0.4, title="Risk Dağılımı", 
+                                  color_discrete_map={"SÜRESİ DOLDU 🚨":"red", "KRİTİK (<3 Ay) ⚠️":"orange", "YAKLAŞIYOR (<6 Ay) ⏳": "#FFD700", "GÜVENLİ ✅":"green"}), use_container_width=True)
 
     # =================================================
-    # TAB 2: COĞRAFİ ANALİZ
+    # TAB 2: DETAYLI BAYİ SAYILARI (YENİ EKLENEN KISIM)
     # =================================================
-    with tab_geo:
-        col_map, col_details = st.columns([2, 1])
+    with tab_detay:
+        # Senaryo kontrolü: Kullanıcı sol menüden şirket seçti mi?
         
-        with col_map:
-            st.subheader("📍 İstasyon Haritası")
-            map_df = df_filtered.copy()
-            lats, lons = [], []
+        if not selected_companies:
+            # SENARYO 1: Şirket seçilmedi -> TÜM ŞİRKETLERİ LİSTELE
+            st.subheader("🏢 Tüm Dağıtım Şirketleri ve Bayi Sayıları")
+            st.info("Sol menüden belirli bir şirket seçerek o şirketin şehir dağılımını görebilirsiniz.")
             
-            for il_adi in map_df['İl']:
-                key = str(il_adi).upper().replace('İ','I')
-                coord = None
-                for k, v in IL_KOORDINATLARI.items():
-                    if k in key:
-                        coord = v
-                        break
-                if coord:
-                    lats.append(coord[0] + np.random.uniform(-0.03, 0.03))
-                    lons.append(coord[1] + np.random.uniform(-0.03, 0.03))
-                else:
-                    lats.append(None); lons.append(None)
+            # Veriyi hazırla
+            comp_stats = df_filtered['Dağıtım Şirketi'].value_counts().reset_index()
+            comp_stats.columns = ['Dağıtım Şirketi', 'Toplam Bayi Sayısı']
             
-            map_df['lat'] = lats
-            map_df['lon'] = lons
-            map_df = map_df.dropna(subset=['lat'])
+            col_d1, col_d2 = st.columns([1, 1])
             
-            if not map_df.empty:
-                fig_map = px.scatter_mapbox(
-                    map_df, lat="lat", lon="lon", color="Dağıtım Şirketi",
-                    hover_name="Unvan", hover_data=["İlçe", "Kalan_Gun"],
-                    zoom=5, height=600, mapbox_style="carto-positron",
-                    size_max=10
+            with col_d1:
+                # Uzun bir tablo (Scroll edilebilir)
+                st.dataframe(
+                    comp_stats, 
+                    use_container_width=True, 
+                    height=600, # Tabloyu uzun tuttum ki hepsi görünsün
+                    hide_index=True,
+                    column_config={
+                        "Dağıtım Şirketi": st.column_config.TextColumn("Şirket Adı", width="large"),
+                        "Toplam Bayi Sayısı": st.column_config.NumberColumn("Bayi Sayısı", format="%d")
+                    }
                 )
-                st.plotly_chart(fig_map, use_container_width=True)
-            else:
-                st.warning("Harita verisi oluşturulamadı.")
+                
+            with col_d2:
+                # Görsel olarak ilk 30'u gösterelim ki grafik patlamasın (ama tablo hepsini gösteriyor)
+                st.write("**Grafiksel Gösterim (İlk 30 Şirket)**")
+                fig_bar = px.bar(comp_stats.head(30), x='Toplam Bayi Sayısı', y='Dağıtım Şirketi', 
+                                 text='Toplam Bayi Sayısı', orientation='h', height=600)
+                fig_bar.update_layout(yaxis={'categoryorder':'total ascending'})
+                st.plotly_chart(fig_bar, use_container_width=True)
 
-        with col_details:
-            st.subheader("İl -> İlçe Dağılımı")
-            top_cities = df_filtered['İl'].value_counts().head(10).index
-            sunburst_df = df_filtered[df_filtered['İl'].isin(top_cities)]
+        else:
+            # SENARYO 2: Şirket seçildi -> O ŞİRKETİN ŞEHİR DAĞILIMINI LİSTELE
+            st.subheader(f"📍 Seçilen Şirketlerin Şehir Dağılımı")
+            st.success(f"Şu an filtrelenen şirketler: {', '.join(selected_companies)}")
             
-            fig_sun = px.sunburst(sunburst_df, path=['İl', 'İlçe'])
-            st.plotly_chart(fig_sun, use_container_width=True)
+            # Şehir bazlı grupla
+            city_stats = df_filtered['İl'].value_counts().reset_index()
+            city_stats.columns = ['Şehir', 'Bayi Sayısı']
+            
+            col_d1, col_d2 = st.columns([1, 1])
+            
+            with col_d1:
+                st.dataframe(
+                    city_stats, 
+                    use_container_width=True, 
+                    height=600,
+                    hide_index=True
+                )
+            
+            with col_d2:
+                st.write("**Grafiksel Dağılım**")
+                fig_bar_city = px.bar(city_stats, x='Bayi Sayısı', y='Şehir', 
+                                      text='Bayi Sayısı', orientation='h', height=600)
+                fig_bar_city.update_layout(yaxis={'categoryorder':'total ascending'})
+                st.plotly_chart(fig_bar_city, use_container_width=True)
 
     # =================================================
     # TAB 3: PAZAR & REKABET
     # =================================================
     with tab_market:
         c_tree, c_pie = st.columns([2, 1])
-        
         with c_tree:
-            st.subheader("🏢 Pazar Hakimiyet Haritası")
-            fig_tree = px.treemap(df_filtered, path=['Dağıtım Şirketi', 'İl'], color='Dağıtım Şirketi')
-            st.plotly_chart(fig_tree, use_container_width=True)
-
+            st.subheader("Pazar Hakimiyet Haritası")
+            st.plotly_chart(px.treemap(df_filtered, path=['Dağıtım Şirketi', 'İl'], color='Dağıtım Şirketi'), use_container_width=True)
         with c_pie:
-            st.subheader("🍰 Pazar Payı")
+            st.subheader("Pazar Payı")
             comp_counts = df_filtered['Dağıtım Şirketi'].value_counts().reset_index()
             comp_counts.columns = ['Şirket', 'Adet']
-            
             if len(comp_counts) > 10:
                 top_10 = comp_counts.iloc[:10]
                 others = pd.DataFrame({'Şirket': ['DİĞERLERİ'], 'Adet': [comp_counts.iloc[10:]['Adet'].sum()]})
                 comp_counts = pd.concat([top_10, others], ignore_index=True)
-            
-            fig_pie = px.pie(comp_counts, values='Adet', names='Şirket', hole=0.4)
-            fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-            fig_pie.update_layout(showlegend=False)
-            st.plotly_chart(fig_pie, use_container_width=True)
+            st.plotly_chart(px.pie(comp_counts, values='Adet', names='Şirket', hole=0.4), use_container_width=True)
 
     # =================================================
     # TAB 4: ZAMAN ANALİZİ
     # =================================================
     with tab_trend:
-        st.subheader("📈 Yıllık Yeni Bayi Girişi")
+        st.subheader("Yıllık Yeni Bayi Girişi")
         if 'Dağıtıcı ile Yapılan Sözleşme Başlangıç Tarihi' in df_filtered.columns:
             trend_df = df_filtered.copy()
             trend_df['Yil'] = trend_df['Dağıtıcı ile Yapılan Sözleşme Başlangıç Tarihi'].dt.year
             yearly_growth = trend_df['Yil'].value_counts().sort_index().reset_index()
             yearly_growth.columns = ['Yıl', 'Yeni Bayi Sayısı']
             yearly_growth = yearly_growth[yearly_growth['Yıl'] >= 2000]
-
-            fig_line = px.line(yearly_growth, x='Yıl', y='Yeni Bayi Sayısı', markers=True)
-            st.plotly_chart(fig_line, use_container_width=True)
+            st.plotly_chart(px.line(yearly_growth, x='Yıl', y='Yeni Bayi Sayısı', markers=True), use_container_width=True)
 
     # =================================================
-    # TAB 5: VERİ LİSTESİ
+    # TAB 5: HAM VERİ
     # =================================================
     with tab_data:
         st.subheader("📋 Veri Listesi")
-        
         show_cols = ['Lisans No', 'Unvan', 'İl', 'İlçe', 'Dağıtım Şirketi', target_date_col, 'Kalan_Gun', 'Risk_Durumu']
         existing_cols = [c for c in show_cols if c in df_filtered.columns]
         export_df = df_filtered[existing_cols].sort_values('Kalan_Gun')
@@ -347,19 +298,13 @@ def main():
         if target_date_col in export_df.columns:
             export_df[target_date_col] = export_df[target_date_col].dt.strftime('%Y-%m-%d')
         
-        st.download_button(
-            "📥 Listeyi İndir (CSV)",
-            export_df.to_csv(index=False).encode('utf-8'),
-            "filtrelenmis_bayi_listesi.csv",
-            "text/csv"
-        )
+        st.download_button("📥 Listeyi İndir (CSV)", export_df.to_csv(index=False).encode('utf-8'), "filtrelenmis_bayi_listesi.csv", "text/csv")
         
         def highlight_risk(val):
             if val == 'SÜRESİ DOLDU 🚨': return 'background-color: #ffcccc; color: black'
             if val == 'KRİTİK (<3 Ay) ⚠️': return 'background-color: #ffeebb; color: black'
             if val == 'YAKLAŞIYOR (<6 Ay) ⏳': return 'background-color: #fff8c4; color: black'
             return ''
-
         st.dataframe(export_df.style.applymap(highlight_risk, subset=['Risk_Durumu']), use_container_width=True, height=600)
 
 if __name__ == "__main__":
