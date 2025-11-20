@@ -142,8 +142,10 @@ def load_word_tables_robust(file_path):
                         for col in df_table.columns:
                             if "Satış" in str(col) or "Pay" in str(col):
                                 try:
-                                    df_table[col] = df_table[col].astype(str).str.replace('.', '', regex=False).str.replace(',', '.', regex=False)
-                                    df_table[col] = pd.to_numeric(df_table[col], errors='coerce').fillna(0)
+                                    # Sayısal Temizlik (Çok Önemli)
+                                    # 1.234,56 -> 1234.56 formatına çevir
+                                    temiz_veri = df_table[col].astype(str).str.replace('.', '', regex=False).str.replace(',', '.', regex=False)
+                                    df_table[col] = pd.to_numeric(temiz_veri, errors='coerce').fillna(0)
                                 except: pass
                         
                         sehir_tablolari[current_city] = df_table
@@ -160,9 +162,7 @@ def main():
     df, target_date_col = load_data(SABIT_DOSYA_ADI)
     
     word_guncel = load_word_tables_robust(WORD_GUNCEL)
-    # word_onceki'yi artık kullanmıyoruz ama dosya yoksa hata vermesin diye okumayı kaldırabiliriz veya tutabiliriz.
-    # İlerde lazım olur diye burada bırakıyorum ama kullanmayacağız.
-    # word_onceki = load_word_tables_robust(WORD_ONCEKI) 
+    # Bi önceki ayı okumuyoruz artık
     word_gecenyil = load_word_tables_robust(WORD_GECEN_YIL)
     
     if df is None:
@@ -296,7 +296,7 @@ def main():
                     st.dataframe(tablo_df, use_container_width=True, height=600)
         else: st.error("Güncel Word dosyası bulunamadı.")
 
-    # 6. ÜRÜN BAZLI KIYASLAMA (Önceki Ay ve Toplamlar Çıkarıldı)
+    # 6. ÜRÜN BAZLI KIYASLAMA (VERİ DOĞRULAMA MODÜLÜ EKLENDİ)
     with tab_kiyas:
         st.header("📊 Ürün Bazlı Kıyaslama (Bu Yıl vs Geçen Yıl)")
         st.info("Sadece Otogaz, Tüplü ve Dökme ürünlerinin karşılaştırmasını içerir.")
@@ -310,23 +310,26 @@ def main():
                 df_gecenyil = word_gecenyil.get(secilen_il_kiyas) if word_gecenyil else None
 
                 if df_guncel is not None:
-                    # Sadece ürün detaylarını al (Toplamları ÇIKARDIK)
+                    # Sütun Eşleşmesi
                     cols_map = {
                         "Lisans Sahibinin Unvanı": "Firma",
                         "Otogaz Satış(ton)": "Otogaz_Ton", "Otogaz Pay(%)": "Otogaz_Pay",
                         "Tüplü Satış(ton)": "Tüplü_Ton", "Tüplü Pay(%)": "Tüplü_Pay",
                         "Dökme Satış(ton)": "Dökme_Ton", "Dökme Pay(%)": "Dökme_Pay"
-                        # Toplamlar silindi
                     }
                     
-                    # --- GÜNCEL VERİ ---
+                    # --- GÜNCEL VERİ HAZIRLIK ---
                     base_df = df_guncel[list(cols_map.keys())].copy()
+                    base_df["Firma"] = base_df["Firma"].astype(str).str.strip() # Boşluk temizle
                     base_df.columns = ["Firma"] + [f"{v}_G" for k,v in cols_map.items() if k != "Lisans Sahibinin Unvanı"]
 
-                    # --- GEÇEN YIL ---
+                    # --- GEÇEN YIL VERİ HAZIRLIK ---
                     if df_gecenyil is not None:
                         temp_last = df_gecenyil[list(cols_map.keys())].copy()
+                        temp_last["Firma"] = temp_last["Firma"].astype(str).str.strip() # Boşluk temizle (EŞLEŞME İÇİN KRİTİK)
                         temp_last.columns = ["Firma"] + [f"{v}_Y" for k,v in cols_map.items() if k != "Lisans Sahibinin Unvanı"]
+                        
+                        # Merge (Birleştirme)
                         base_df = pd.merge(base_df, temp_last, on="Firma", how="left")
                     else:
                         for k,v in cols_map.items():
@@ -334,33 +337,30 @@ def main():
                     
                     base_df = base_df.fillna(0)
 
-                    # Satır Sıralama (Otogaz Ton'a göre)
+                    # Satır Sıralama
                     toplam_row = base_df[base_df["Firma"] == "TOPLAM"]
                     main_rows = base_df[base_df["Firma"] != "TOPLAM"].sort_values("Otogaz_Ton_G", ascending=False)
                     final_df = pd.concat([main_rows, toplam_row])
 
                     final_df.set_index("Firma", inplace=True)
 
-                    # Sütun Sıralaması (Sadece G ve Y)
-                    # Önceki Ay (_Ö) kaldırıldı
+                    # Sütun Sıralaması
                     ordered_cols = []
-                    for cat in ["Otogaz", "Tüplü", "Dökme"]: # Toplam kategorisi kaldırıldı
+                    for cat in ["Otogaz", "Tüplü", "Dökme"]: 
                         for period in ["_G", "_Y"]:
                             ordered_cols.append(f"{cat}_Ton{period}")
                             ordered_cols.append(f"{cat}_Pay{period}")
                     
                     final_df = final_df[ordered_cols]
                     
-                    # Başlık İsimlendirme
+                    # Başlıklar
                     new_cols = []
                     for col in ordered_cols:
                         parts = col.split('_')
                         cat = parts[0]
                         tip = "Ton" if "Ton" in parts[1] else "%"
-                        
                         suffix = parts[-1]
                         per = "Güncel" if "G" in suffix else "Geçen Yıl"
-                            
                         new_cols.append(f"{cat} {tip} ({per})")
                     
                     final_df.columns = new_cols
