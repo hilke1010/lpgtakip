@@ -294,7 +294,7 @@ def main():
                     st.dataframe(tablo_df, use_container_width=True, height=600)
         else: st.error("Güncel Word dosyası bulunamadı.")
 
-    # 6. DETAYLI KIYASLAMA (SABİT SÜTUN VE PAZAR PAYI EKLENDİ)
+    # 6. DETAYLI KIYASLAMA (HATA DÜZELTİLDİ)
     with tab_kiyas:
         st.header("📊 Detaylı Ürün Bazlı Kıyaslama")
         st.info("Tablo sağa doğru kaydırıldığında firma isimleri sabit kalır.")
@@ -309,7 +309,7 @@ def main():
                 df_gecenyil = word_gecenyil.get(secilen_il_kiyas) if word_gecenyil else None
 
                 if df_guncel is not None:
-                    # Tüm verileri alıyoruz (Paylar dahil)
+                    # Tüm verileri alıyoruz
                     cols_map = {
                         "Lisans Sahibinin Unvanı": "Firma",
                         "Otogaz Satış(ton)": "Otogaz_Ton", "Otogaz Pay(%)": "Otogaz_Pay",
@@ -351,7 +351,6 @@ def main():
                     final_df.set_index("Firma", inplace=True)
 
                     # Sütun Sıralaması (G: Güncel, Ö: Önceki, Y: Geçen Yıl)
-                    # Format: Otogaz (Ton G, Pay G, Ton Ö, Pay Ö...), Tüplü...
                     ordered_cols = []
                     for cat in ["Otogaz", "Tüplü", "Dökme", "Toplam"]:
                         for period in ["_G", "_Ö", "_Y"]:
@@ -360,13 +359,24 @@ def main():
                     
                     final_df = final_df[ordered_cols]
                     
-                    # Okunaklı Başlıklar
+                    # DÜZELTİLEN KISIM: Başlık İsimlendirme
                     new_cols = []
                     for col in ordered_cols:
+                        # col örn: Otogaz_Ton_G veya Otogaz_Pay_Ö
                         parts = col.split('_')
-                        cat = parts[0]
-                        tip = "Ton" if "Ton" in parts[1] else "%"
-                        per = "Güncel" if "G" in parts[1] else ("Önceki Ay" if "Ö" in parts[1] else "Geçen Yıl")
+                        cat = parts[0] # Otogaz
+                        tip = "Ton" if "Ton" in parts[1] else "%" # Ton veya %
+                        
+                        # Suffix kontrolü (G, Ö, Y)
+                        suffix = parts[-1] # _G, _Ö veya _Y
+                        
+                        if "G" in suffix:
+                            per = "Güncel"
+                        elif "Ö" in suffix:
+                            per = "Önceki Ay"
+                        else:
+                            per = "Geçen Yıl"
+                            
                         new_cols.append(f"{cat} {tip} ({per})")
                     
                     final_df.columns = new_cols
