@@ -75,13 +75,7 @@ def load_data(file_path):
         st.error(f"Excel okuma hatası: {e}"); return None, None
 
 # --- 5. GELİŞMİŞ WORD OKUYUCU (SIRALI OKUMA) ---
-# Bu fonksiyon Word dosyasını yukarıdan aşağıya satır satır tarar.
-# Başlığı bulduğu an, hemen altındaki tabloyu o başlığa atar.
-
 def iter_block_items(parent):
-    """
-    Word belgesindeki paragrafları ve tabloları oluş sırasına göre getirir.
-    """
     if isinstance(parent, _Document):
         parent_elm = parent.element.body
     elif isinstance(parent, _Cell):
@@ -102,48 +96,28 @@ def load_word_tables_robust(file_path):
     try:
         doc = Document(file_path)
         sehir_tablolari = {}
-        
-        current_city = None # O an hangi şehir başlığını okuduk?
-        
-        # Regex: "Tablo 4.7: Ankara" veya "Tablo X: İSTANBUL" formatını yakalar
+        current_city = None 
         city_pattern = re.compile(r"Tablo\s+[\d\.]+\s*:\s*(.+)", re.IGNORECASE)
 
-        # Belgeyi yukarıdan aşağıya akış sırasına göre gez
         for block in iter_block_items(doc):
-            
-            # Eğer blok bir PARAGRAF ise: Başlık mı diye bak
             if isinstance(block, Paragraph):
                 text = block.text.strip()
                 match = city_pattern.search(text)
                 if match:
-                    # Şehri bulduk, hafızaya al (Örn: ANKARA)
                     raw_city = match.group(1).strip()
-                    # Sayfa numarası veya gereksiz ekleri temizle (Örn: "Ankara 33" -> "ANKARA")
-                    # Genelde şehir ismi kelime kelimedir, sondaki sayıları atalım
                     raw_city = re.sub(r'\d+$', '', raw_city).strip()
-                    
                     current_city = raw_city.upper().replace('i', 'İ').replace('ı', 'I')
             
-            # Eğer blok bir TABLO ise ve hafızada bir şehir varsa: Eşleştir!
             elif isinstance(block, Table):
                 if current_city:
-                    # Tabloyu işle
                     data = []
-                    for row_idx, row in enumerate(block.rows):
+                    for row in block.rows:
                         row_data = [cell.text.strip() for cell in row.cells]
-                        # Boş satırları atla
                         if not any(row_data): continue
                         data.append(row_data)
                     
-                    # Tablo boş değilse ve yeterli satır varsa işle
                     if len(data) > 3:
-                        # Başlık satırlarını (Tüplü, Dökme vs.) atlayıp veriyi alalım
-                        # Veri genellikle 3. satırdan başlar (0 ve 1 başlıktır)
-                        # Ancak bazen kayma olabilir. "Lisans" kelimesini arayalım.
-                        
-                        start_idx = 2 # Varsayılan veri başlangıcı
-                        
-                        # Özel Başlıklar
+                        # Başlıklar
                         headers = [
                             "Lisans Sahibinin Unvanı", 
                             "Tüplü Satış(ton)", "Tüplü Pay(%)",
@@ -152,43 +126,28 @@ def load_word_tables_robust(file_path):
                             "Toplam Satış(ton)", "Toplam Pay(%)"
                         ]
                         
-                        # Sütun sayısı tutuyorsa oluştur
-                        # Bazen Word tablolarında hücre birleştirme yüzünden sütun sayısı farklı görünebilir
-                        # En güvenli yol: veriyi alıp sütun sayısına göre DataFrame yapmaktır.
+                        # Veri kısmını al (Genelde 3. satırdan başlar)
+                        # Ancak tablo yapısına göre dinamik davranalım
+                        body_data = data[2:] 
                         
-                        # Veri kısmını al
-                        body_data = data[start_idx:]
-                        
-                        # DataFrame oluştur
-                        # Eğer Word tablosundaki sütun sayısı ile bizim başlıklarımız uyuşmazsa
-                        # Dinamik olarak ayarla
-                        cols_count = len(data[0]) if data else 9
-                        
-                        if cols_count == 9:
+                        # Sütun sayısı kontrolü
+                        if data and len(data[0]) == 9:
                             df_table = pd.DataFrame(body_data, columns=headers)
                         else:
-                            # Başlık sayısı tutmazsa genel isim ver
                             df_table = pd.DataFrame(body_data)
-                            # Eğer 9 sütun varsa isimleri zorla
-                            if df_table.shape[1] == 9:
-                                df_table.columns = headers
+                            if df_table.shape[1] == 9: df_table.columns = headers
 
                         # Sayısal Temizlik
-                        # 8.731,52 -> 8731.52 formatına çevir
                         for col in df_table.columns:
                             if "Satış" in str(col) or "Pay" in str(col):
                                 try:
                                     df_table[col] = df_table[col].astype(str).str.replace('.', '', regex=False).str.replace(',', '.', regex=False)
                                     df_table[col] = pd.to_numeric(df_table[col], errors='coerce').fillna(0)
-                                except:
-                                    pass
+                                except: pass
                         
-                        # Sözlüğe kaydet
                         sehir_tablolari[current_city] = df_table
                     
-                    # Tabloyu aldık, artık hafızadaki şehri sıfırla ki sonraki tablo yanlışlıkla buna eklenmesin
                     current_city = None
-                    
         return sehir_tablolari
 
     except Exception as e:
@@ -245,7 +204,7 @@ def main():
         "⚡ Sözleşme & Risk", "🔢 Detaylı Bayi", "🏢 Pazar & Rekabet", "📈 Zaman Analizi", "📄 EPDK Satış Raporu", "📋 Ham Veri"
     ])
 
-    # 1. RİSK
+    # 1. RİSK TABLOSU (DÜZELTİLDİ)
     with tab_risk:
         st.subheader("🚨 Kritik Sözleşmeler (İlk 6 Ay)")
         critical_df = df_filtered[df_filtered['Kalan_Gun'] < 180].sort_values('Kalan_Gun')
@@ -259,21 +218,33 @@ def main():
             df_filtered['Yil'] = df_filtered[target_date_col].dt.year
             y_cnt = df_filtered['Yil'].value_counts().sort_index().reset_index()
             y_cnt.columns=['Yıl','Adet']
-            y_cnt = y_cnt[(y_cnt['Yıl'] >= datetime.date.today().year) & (y_cnt['Yıl'] <= datetime.date.today().year+10)]
+            curr_year = datetime.date.today().year
+            y_cnt = y_cnt[(y_cnt['Yıl'] >= curr_year) & (y_cnt['Yıl'] <= curr_year+10)]
             st.plotly_chart(px.bar(y_cnt, x='Yıl', y='Adet', text='Adet', color='Adet', color_continuous_scale='Oranges'), use_container_width=True)
+        
+        # --- HATA VEREN KISIM DÜZELTİLDİ ---
         with col_r2:
-            st.plotly_chart(px.pie(df_filtered['Risk_Durumu'].value_counts().reset_index(name='Adet'), values='Adet', names='index', hole=0.4), use_container_width=True)
+            # value_counts().reset_index() işlemi Pandas sürümüne göre farklı kolon ismi veriyor.
+            # Bu yüzden kolon isimlerini elle sabitliyoruz.
+            risk_counts = df_filtered['Risk_Durumu'].value_counts().reset_index()
+            risk_counts.columns = ['Durum', 'Adet'] # Kolon isimlerini garantiledik
+            
+            st.plotly_chart(
+                px.pie(risk_counts, values='Adet', names='Durum', hole=0.4, title="Risk Dağılımı",
+                       color_discrete_map={"SÜRESİ DOLDU 🚨":"red", "KRİTİK (<3 Ay) ⚠️":"orange", "YAKLAŞIYOR (<6 Ay) ⏳": "#FFD700", "GÜVENLİ ✅":"green"}), 
+                use_container_width=True
+            )
 
     # 2. DETAY
     with tab_detay:
         if not selected_companies:
-            comp_stats = df_filtered['Dağıtım Şirketi'].value_counts().reset_index(name='Toplam Bayi')
+            comp_stats = df_filtered['Dağıtım Şirketi'].value_counts().reset_index()
             comp_stats.columns = ['Şirket', 'Toplam Bayi']
             c_d1, c_d2 = st.columns(2)
             with c_d1: st.dataframe(comp_stats, use_container_width=True, height=600, hide_index=True)
             with c_d2: st.plotly_chart(px.bar(comp_stats.head(30), x='Toplam Bayi', y='Şirket', orientation='h', height=600), use_container_width=True)
         else:
-            city_stats = df_filtered['İl'].value_counts().reset_index(name='Bayi Sayısı')
+            city_stats = df_filtered['İl'].value_counts().reset_index()
             city_stats.columns = ['Şehir', 'Bayi Sayısı']
             c_d1, c_d2 = st.columns(2)
             with c_d1: st.dataframe(city_stats, use_container_width=True, height=600, hide_index=True)
@@ -284,7 +255,7 @@ def main():
         c_m1, c_m2 = st.columns(2)
         with c_m1: st.plotly_chart(px.treemap(df_filtered, path=['Dağıtım Şirketi', 'İl'], color='Dağıtım Şirketi'), use_container_width=True)
         with c_m2:
-            cc = df_filtered['Dağıtım Şirketi'].value_counts().reset_index(name='Adet')
+            cc = df_filtered['Dağıtım Şirketi'].value_counts().reset_index()
             cc.columns=['Şirket','Adet']
             tot = cc['Adet'].sum()
             if len(cc)>10: cc = pd.concat([cc.iloc[:10], pd.DataFrame({'Şirket':['DİĞER'],'Adet':[cc.iloc[10:]['Adet'].sum()]})])
@@ -301,7 +272,7 @@ def main():
             yg.columns=['Yıl','Yeni Bayi']
             st.plotly_chart(px.line(yg[yg['Yıl']>=2000], x='Yıl', y='Yeni Bayi', markers=True), use_container_width=True)
 
-    # 5. EPDK RAPORU (WORD DÜZELTİLDİ)
+    # 5. EPDK RAPORU
     with tab_epdk:
         st.header("📄 EPDK Satış Raporları (Word)")
         st.info("Veriler Word dosyasından sıralı okunarak çekilmiştir.")
@@ -317,15 +288,12 @@ def main():
                     
                     st.markdown(f"### 📍 {secilen_il_word} İli LPG Satış Tablosu")
                     
-                    # MATPLOTLIB ZORUNLULUĞU OLMADAN GÖSTERİM
                     try:
-                        # Eğer matplotlib requirements.txt içinde varsa boyar
                         st.dataframe(
                             tablo_df.style.format(precision=2).background_gradient(cmap="Blues", subset=["Toplam Satış(ton)"]),
                             use_container_width=True, height=600
                         )
                     except:
-                        # Yoksa düz gösterir
                         st.dataframe(tablo_df, use_container_width=True, height=600)
                         
                     if "Toplam Satış(ton)" in tablo_df.columns and "Lisans Sahibinin Unvanı" in tablo_df.columns:
