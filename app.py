@@ -23,8 +23,8 @@ st.set_page_config(
 # --- 2. DOSYA İSİMLERİ ---
 SABIT_DOSYA_ADI = "lpg_veri.xlsx"
 WORD_GUNCEL = "satis.docx"       
-WORD_ONCEKI = "bionceki.docx"    
 WORD_GECEN_YIL = "gecensene.docx" 
+# bionceki.docx SİLİNDİ
 
 # --- 3. CSS ÖZELLEŞTİRME ---
 st.markdown("""
@@ -142,10 +142,8 @@ def load_word_tables_robust(file_path):
                         for col in df_table.columns:
                             if "Satış" in str(col) or "Pay" in str(col):
                                 try:
-                                    # Sayısal Temizlik (Çok Önemli)
-                                    # 1.234,56 -> 1234.56 formatına çevir
-                                    temiz_veri = df_table[col].astype(str).str.replace('.', '', regex=False).str.replace(',', '.', regex=False)
-                                    df_table[col] = pd.to_numeric(temiz_veri, errors='coerce').fillna(0)
+                                    df_table[col] = df_table[col].astype(str).str.replace('.', '', regex=False).str.replace(',', '.', regex=False)
+                                    df_table[col] = pd.to_numeric(df_table[col], errors='coerce').fillna(0)
                                 except: pass
                         
                         sehir_tablolari[current_city] = df_table
@@ -162,7 +160,6 @@ def main():
     df, target_date_col = load_data(SABIT_DOSYA_ADI)
     
     word_guncel = load_word_tables_robust(WORD_GUNCEL)
-    # Bi önceki ayı okumuyoruz artık
     word_gecenyil = load_word_tables_robust(WORD_GECEN_YIL)
     
     if df is None:
@@ -207,7 +204,7 @@ def main():
 
     # --- SEKMELER ---
     tab_risk, tab_detay, tab_market, tab_trend, tab_epdk, tab_kiyas, tab_data = st.tabs([
-        "⚡ Sözleşme & Risk", "🔢 Detaylı Bayi", "🏢 Pazar & Rekabet", "📈 Zaman Analizi", "📄 EPDK Satış Raporu", "📊 Ürün Bazlı Kıyaslama", "📋 Ham Veri"
+        "⚡ Sözleşme & Risk", "🔢 Detaylı Bayi", "🏢 Pazar & Rekabet", "📈 Zaman Analizi", "📄 EPDK Satış Raporu", "📊 Yıllık Kıyaslama", "📋 Ham Veri"
     ])
 
     # 1. RİSK
@@ -296,10 +293,10 @@ def main():
                     st.dataframe(tablo_df, use_container_width=True, height=600)
         else: st.error("Güncel Word dosyası bulunamadı.")
 
-    # 6. ÜRÜN BAZLI KIYASLAMA (VERİ DOĞRULAMA MODÜLÜ EKLENDİ)
+    # 6. ÜRÜN BAZLI KIYASLAMA (DÜZELTİLMİŞ)
     with tab_kiyas:
         st.header("📊 Ürün Bazlı Kıyaslama (Bu Yıl vs Geçen Yıl)")
-        st.info("Sadece Otogaz, Tüplü ve Dökme ürünlerinin karşılaştırmasını içerir.")
+        st.info("Sadece Otogaz, Tüplü ve Dökme ürünleri. (Bi Önceki Ay Çıkarıldı)")
 
         if word_guncel:
             sehirler_kiyas = sorted(list(word_guncel.keys()))
@@ -310,7 +307,6 @@ def main():
                 df_gecenyil = word_gecenyil.get(secilen_il_kiyas) if word_gecenyil else None
 
                 if df_guncel is not None:
-                    # Sütun Eşleşmesi
                     cols_map = {
                         "Lisans Sahibinin Unvanı": "Firma",
                         "Otogaz Satış(ton)": "Otogaz_Ton", "Otogaz Pay(%)": "Otogaz_Pay",
@@ -318,18 +314,21 @@ def main():
                         "Dökme Satış(ton)": "Dökme_Ton", "Dökme Pay(%)": "Dökme_Pay"
                     }
                     
-                    # --- GÜNCEL VERİ HAZIRLIK ---
+                    # --- GÜNCEL VERİ ---
                     base_df = df_guncel[list(cols_map.keys())].copy()
-                    base_df["Firma"] = base_df["Firma"].astype(str).str.strip() # Boşluk temizle
+                    # HATA DÜZELTME: Önce isimleri değiştiriyoruz, sonra erişiyoruz
                     base_df.columns = ["Firma"] + [f"{v}_G" for k,v in cols_map.items() if k != "Lisans Sahibinin Unvanı"]
+                    # Şimdi "Firma" sütunu var, boşluk temizliği yapabiliriz
+                    base_df["Firma"] = base_df["Firma"].astype(str).str.strip()
 
-                    # --- GEÇEN YIL VERİ HAZIRLIK ---
+                    # --- GEÇEN YIL VERİ ---
                     if df_gecenyil is not None:
                         temp_last = df_gecenyil[list(cols_map.keys())].copy()
-                        temp_last["Firma"] = temp_last["Firma"].astype(str).str.strip() # Boşluk temizle (EŞLEŞME İÇİN KRİTİK)
+                        # Önce isimleri değiştiriyoruz
                         temp_last.columns = ["Firma"] + [f"{v}_Y" for k,v in cols_map.items() if k != "Lisans Sahibinin Unvanı"]
+                        # Şimdi "Firma" sütunu var, temizlik yapıyoruz
+                        temp_last["Firma"] = temp_last["Firma"].astype(str).str.strip()
                         
-                        # Merge (Birleştirme)
                         base_df = pd.merge(base_df, temp_last, on="Firma", how="left")
                     else:
                         for k,v in cols_map.items():
@@ -341,19 +340,17 @@ def main():
                     toplam_row = base_df[base_df["Firma"] == "TOPLAM"]
                     main_rows = base_df[base_df["Firma"] != "TOPLAM"].sort_values("Otogaz_Ton_G", ascending=False)
                     final_df = pd.concat([main_rows, toplam_row])
-
                     final_df.set_index("Firma", inplace=True)
 
-                    # Sütun Sıralaması
+                    # Sütun Sıralaması (Sadece G ve Y)
                     ordered_cols = []
-                    for cat in ["Otogaz", "Tüplü", "Dökme"]: 
+                    for cat in ["Otogaz", "Tüplü", "Dökme"]:
                         for period in ["_G", "_Y"]:
                             ordered_cols.append(f"{cat}_Ton{period}")
                             ordered_cols.append(f"{cat}_Pay{period}")
                     
                     final_df = final_df[ordered_cols]
                     
-                    # Başlıklar
                     new_cols = []
                     for col in ordered_cols:
                         parts = col.split('_')
