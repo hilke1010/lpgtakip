@@ -22,9 +22,9 @@ st.set_page_config(
 
 # --- 2. DOSYA İSİMLERİ ---
 SABIT_DOSYA_ADI = "lpg_veri.xlsx"
-WORD_GUNCEL = "satis.docx"       # Eylül 2025 (Güncel)
-WORD_ONCEKI = "bionceki.docx"    # Ağustos 2025 (Bir Önceki Ay)
-WORD_GECEN_YIL = "gecensene.docx" # Eylül 2024 (Geçen Sene)
+WORD_GUNCEL = "satis.docx"       
+WORD_ONCEKI = "bionceki.docx"    
+WORD_GECEN_YIL = "gecensene.docx" 
 
 # --- 3. CSS ÖZELLEŞTİRME ---
 st.markdown("""
@@ -159,7 +159,6 @@ def main():
     # --- VERİ ÇEKME ---
     df, target_date_col = load_data(SABIT_DOSYA_ADI)
     
-    # 3 Dosyayı da oku
     word_guncel = load_word_tables_robust(WORD_GUNCEL)
     word_onceki = load_word_tables_robust(WORD_ONCEKI)
     word_gecenyil = load_word_tables_robust(WORD_GECEN_YIL)
@@ -205,17 +204,15 @@ def main():
     st.divider()
 
     # --- SEKMELER ---
-    # YENİ SEKME: "📊 Kıyaslama" eklendi
     tab_risk, tab_detay, tab_market, tab_trend, tab_epdk, tab_kiyas, tab_data = st.tabs([
-        "⚡ Sözleşme & Risk", "🔢 Detaylı Bayi", "🏢 Pazar & Rekabet", "📈 Zaman Analizi", "📄 EPDK Satış Raporu", "📊 Kıyaslama", "📋 Ham Veri"
+        "⚡ Sözleşme & Risk", "🔢 Detaylı Bayi", "🏢 Pazar & Rekabet", "📈 Zaman Analizi", "📄 EPDK Satış Raporu", "📊 Detaylı Kıyaslama", "📋 Ham Veri"
     ])
 
-    # 1. RİSK TABLOSU
+    # 1. RİSK
     with tab_risk:
         st.subheader("🚨 Kritik Sözleşmeler (İlk 6 Ay)")
         critical_df = df_filtered[df_filtered['Kalan_Gun'] < 180].sort_values('Kalan_Gun')
         critical_df.index = np.arange(1, len(critical_df) + 1)
-        
         if not critical_df.empty:
             critical_df['Bitis'] = critical_df[target_date_col].dt.strftime('%Y-%m-%d')
             st.dataframe(critical_df[['Unvan', 'İl', 'Dağıtım Şirketi', 'Bitis', 'Kalan_Gun', 'Risk_Durumu']], use_container_width=True)
@@ -229,15 +226,11 @@ def main():
             curr_year = datetime.date.today().year
             y_cnt = y_cnt[(y_cnt['Yıl'] >= curr_year) & (y_cnt['Yıl'] <= curr_year+10)]
             st.plotly_chart(px.bar(y_cnt, x='Yıl', y='Adet', text='Adet', color='Adet', color_continuous_scale='Oranges'), use_container_width=True)
-        
         with col_r2:
             risk_counts = df_filtered['Risk_Durumu'].value_counts().reset_index()
             risk_counts.columns = ['Durum', 'Adet']
-            st.plotly_chart(
-                px.pie(risk_counts, values='Adet', names='Durum', hole=0.4, title="Risk Dağılımı",
-                       color_discrete_map={"SÜRESİ DOLDU 🚨":"red", "KRİTİK (<3 Ay) ⚠️":"orange", "YAKLAŞIYOR (<6 Ay) ⏳": "#FFD700", "GÜVENLİ ✅":"green"}), 
-                use_container_width=True
-            )
+            st.plotly_chart(px.pie(risk_counts, values='Adet', names='Durum', hole=0.4, title="Risk Dağılımı",
+                                   color_discrete_map={"SÜRESİ DOLDU 🚨":"red", "KRİTİK (<3 Ay) ⚠️":"orange", "YAKLAŞIYOR (<6 Ay) ⏳": "#FFD700", "GÜVENLİ ✅":"green"}), use_container_width=True)
 
     # 2. DETAY
     with tab_detay:
@@ -277,12 +270,7 @@ def main():
 
     # 4. ZAMAN
     with tab_trend:
-        st.subheader("📈 Yıllık Yeni Bayi Girişi ve Trendler")
-        st.markdown("""
-        <div style="background-color: #e8f4f8; padding: 15px; border-radius: 5px; margin-bottom: 20px; border-left: 5px solid #3498db;">
-            <strong>ℹ️ Analiz Bilgisi:</strong> Bu grafik, yıllara göre sisteme yeni katılan bayi sayılarını göstermektedir.
-        </div>
-        """, unsafe_allow_html=True)
+        st.subheader("📈 Yıllık Yeni Bayi Girişi")
         if 'Dağıtıcı ile Yapılan Sözleşme Başlangıç Tarihi' in df_filtered.columns:
             dy = df_filtered.copy()
             dy['Yil'] = dy['Dağıtıcı ile Yapılan Sözleşme Başlangıç Tarihi'].dt.year
@@ -290,31 +278,26 @@ def main():
             yg.columns=['Yıl','Yeni Bayi']
             st.plotly_chart(px.line(yg[yg['Yıl']>=2000], x='Yıl', y='Yeni Bayi', markers=True), use_container_width=True)
 
-    # 5. EPDK RAPORU (Sadece Güncel Ay)
+    # 5. EPDK RAPORU (Sadece Güncel)
     with tab_epdk:
-        st.header("📄 EPDK Satış Raporu (Güncel)")
-        
+        st.header("📄 EPDK Satış Raporu (Güncel Ay)")
         if word_guncel:
             sehirler = sorted(list(word_guncel.keys()))
             secilen_il_word = st.selectbox("İl Seçin:", sehirler)
             if secilen_il_word:
                 tablo_df = word_guncel[secilen_il_word]
-                st.markdown(f"### 📍 {secilen_il_word} İli LPG Satış Tablosu (Eylül 2025)")
+                st.markdown(f"### 📍 {secilen_il_word} Satış Tablosu")
                 tablo_df.index = np.arange(1, len(tablo_df) + 1)
                 try:
-                    st.dataframe(
-                        tablo_df.style.format(precision=2).background_gradient(cmap="Blues", subset=["Toplam Satış(ton)"]),
-                        use_container_width=True, height=600
-                    )
+                    st.dataframe(tablo_df.style.format(precision=2).background_gradient(cmap="Blues", subset=["Toplam Satış(ton)"]), use_container_width=True, height=600)
                 except:
                     st.dataframe(tablo_df, use_container_width=True, height=600)
-        else:
-            st.error(f"'{WORD_GUNCEL}' dosyası bulunamadı.")
+        else: st.error("Güncel Word dosyası bulunamadı.")
 
-    # 6. KIYASLAMA (YAN YANA SÜTUNLAR - FARKI ÇIKARMA YOK)
+    # 6. DETAYLI KIYASLAMA (İSTEĞİNİZE GÖRE GÜNCELLENDİ)
     with tab_kiyas:
-        st.header("📊 Geçmiş Dönem Kıyaslama Tablosu")
-        st.info("Şirketlerin Güncel, Bir Önceki Ay ve Geçen Yıl aynı dönemdeki satışları yan yana listelenmiştir.")
+        st.header("📊 Detaylı Ürün Bazlı Kıyaslama")
+        st.info("Otogaz, Tüplü ve Dökme verilerinin Güncel, Önceki Ay ve Geçen Yıl karşılaştırması.")
 
         if word_guncel:
             sehirler_kiyas = sorted(list(word_guncel.keys()))
@@ -326,45 +309,65 @@ def main():
                 df_gecenyil = word_gecenyil.get(secilen_il_kiyas) if word_gecenyil else None
 
                 if df_guncel is not None:
-                    # İhtiyacımız olan sütunlar
-                    cols_needed = ["Lisans Sahibinin Unvanı", "Toplam Satış(ton)"]
+                    # Tüm satış tiplerini alıyoruz
+                    cols_map = {
+                        "Lisans Sahibinin Unvanı": "Firma",
+                        "Otogaz Satış(ton)": "Otogaz",
+                        "Tüplü Satış(ton)": "Tüplü",
+                        "Dökme Satış(ton)": "Dökme",
+                        "Toplam Satış(ton)": "Toplam"
+                    }
+                    
+                    # --- GÜNCEL VERİ ---
+                    base_df = df_guncel[list(cols_map.keys())].copy()
+                    base_df.columns = ["Firma", "Otogaz_G", "Tüplü_G", "Dökme_G", "Toplam_G"]
 
-                    # 1. Güncel
-                    base_df = df_guncel[cols_needed].copy()
-                    base_df.columns = ["Firma", "Satış (Güncel)"]
-
-                    # 2. Önceki Ay
+                    # --- ÖNCEKİ AY ---
                     if df_onceki is not None:
-                        temp_prev = df_onceki[cols_needed].copy()
-                        temp_prev.columns = ["Firma", "Satış (Önceki Ay)"]
+                        temp_prev = df_onceki[list(cols_map.keys())].copy()
+                        temp_prev.columns = ["Firma", "Otogaz_Ö", "Tüplü_Ö", "Dökme_Ö", "Toplam_Ö"]
                         base_df = pd.merge(base_df, temp_prev, on="Firma", how="left")
                     else:
-                        base_df["Satış (Önceki Ay)"] = 0
+                        for c in ["Otogaz_Ö", "Tüplü_Ö", "Dökme_Ö", "Toplam_Ö"]: base_df[c] = 0
 
-                    # 3. Geçen Yıl
+                    # --- GEÇEN YIL ---
                     if df_gecenyil is not None:
-                        temp_last = df_gecenyil[cols_needed].copy()
-                        temp_last.columns = ["Firma", "Satış (Geçen Yıl)"]
+                        temp_last = df_gecenyil[list(cols_map.keys())].copy()
+                        temp_last.columns = ["Firma", "Otogaz_Y", "Tüplü_Y", "Dökme_Y", "Toplam_Y"]
                         base_df = pd.merge(base_df, temp_last, on="Firma", how="left")
                     else:
-                        base_df["Satış (Geçen Yıl)"] = 0
+                        for c in ["Otogaz_Y", "Tüplü_Y", "Dökme_Y", "Toplam_Y"]: base_df[c] = 0
                     
-                    # NaN olanları 0 yap
                     base_df = base_df.fillna(0)
 
-                    # Toplam satırını en alta at
+                    # Satır Sıralama (Toplam Güncel Satışa Göre)
                     toplam_row = base_df[base_df["Firma"] == "TOPLAM"]
-                    main_rows = base_df[base_df["Firma"] != "TOPLAM"].sort_values("Satış (Güncel)", ascending=False)
+                    main_rows = base_df[base_df["Firma"] != "TOPLAM"].sort_values("Toplam_G", ascending=False)
                     final_df = pd.concat([main_rows, toplam_row])
-                    
                     final_df.index = np.arange(1, len(final_df) + 1)
 
-                    st.markdown(f"### {secilen_il_kiyas} Satış Karşılaştırması (Ton)")
-                    st.dataframe(
-                        final_df.style.format(precision=2),
-                        use_container_width=True,
-                        height=600
-                    )
+                    # Sütunları Mantıklı Sıraya Sokalım (Ürün Bazlı Gruplama)
+                    # Firma | OTOGAZ (G, Ö, Y) | TÜPLÜ (G, Ö, Y) | DÖKME (G, Ö, Y) | TOPLAM (G, Ö, Y)
+                    ordered_cols = ["Firma"] + \
+                                   ["Otogaz_G", "Otogaz_Ö", "Otogaz_Y"] + \
+                                   ["Tüplü_G", "Tüplü_Ö", "Tüplü_Y"] + \
+                                   ["Dökme_G", "Dökme_Ö", "Dökme_Y"] + \
+                                   ["Toplam_G", "Toplam_Ö", "Toplam_Y"]
+                    
+                    final_df = final_df[ordered_cols]
+                    
+                    # Okunaklı Başlıklar
+                    final_df.columns = [
+                        "Firma", 
+                        "Otogaz (Güncel)", "Otogaz (Önceki Ay)", "Otogaz (Geçen Yıl)",
+                        "Tüplü (Güncel)", "Tüplü (Önceki Ay)", "Tüplü (Geçen Yıl)",
+                        "Dökme (Güncel)", "Dökme (Önceki Ay)", "Dökme (Geçen Yıl)",
+                        "Toplam (Güncel)", "Toplam (Önceki Ay)", "Toplam (Geçen Yıl)"
+                    ]
+
+                    st.markdown(f"### {secilen_il_kiyas} Detaylı Satış Karşılaştırması (Ton)")
+                    st.dataframe(final_df.style.format(precision=2), use_container_width=True, height=600)
+
         else:
             st.error("Güncel Word dosyası eksik.")
 
