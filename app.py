@@ -22,7 +22,7 @@ st.set_page_config(
 
 # --- 2. DOSYA İSİMLERİ ---
 SABIT_DOSYA_ADI = "lpg_veri.xlsx"
-WORD_DOSYA_ADI = "satis.docx"
+# Word dosyası artık kullanılmadığı için işlem yapılmayacak
 
 # --- 3. CSS ÖZELLEŞTİRME ---
 st.markdown("""
@@ -74,89 +74,9 @@ def load_data(file_path):
     except Exception as e:
         st.error(f"Excel okuma hatası: {e}"); return None, None
 
-# --- 5. GELİŞMİŞ WORD OKUYUCU ---
-def iter_block_items(parent):
-    if isinstance(parent, _Document):
-        parent_elm = parent.element.body
-    elif isinstance(parent, _Cell):
-        parent_elm = parent._tc
-    else:
-        raise ValueError("something's not right")
-
-    for child in parent_elm.iterchildren():
-        if isinstance(child, CT_P):
-            yield Paragraph(child, parent)
-        elif isinstance(child, CT_Tbl):
-            yield Table(child, parent)
-
-@st.cache_data
-def load_word_tables_robust(file_path):
-    if not os.path.exists(file_path): return None
-
-    try:
-        doc = Document(file_path)
-        sehir_tablolari = {}
-        current_city = None 
-        city_pattern = re.compile(r"Tablo\s+[\d\.]+\s*:\s*(.+)", re.IGNORECASE)
-
-        for block in iter_block_items(doc):
-            if isinstance(block, Paragraph):
-                text = block.text.strip()
-                match = city_pattern.search(text)
-                if match:
-                    raw_city = match.group(1).strip()
-                    raw_city = re.sub(r'\d+$', '', raw_city).strip()
-                    current_city = raw_city.upper().replace('i', 'İ').replace('ı', 'I')
-            
-            elif isinstance(block, Table):
-                if current_city:
-                    data = []
-                    for row in block.rows:
-                        row_data = []
-                        seen_cells = set()
-                        for cell in row.cells:
-                            if id(cell) not in seen_cells:
-                                row_data.append(cell.text.strip())
-                                seen_cells.add(id(cell))
-                        if not any(row_data): continue
-                        data.append(row_data)
-                    
-                    if len(data) > 3:
-                        headers = [
-                            "Lisans Sahibinin Unvanı", 
-                            "Tüplü Satış(ton)", "Tüplü Pay(%)",
-                            "Dökme Satış(ton)", "Dökme Pay(%)",
-                            "Otogaz Satış(ton)", "Otogaz Pay(%)",
-                            "Toplam Satış(ton)", "Toplam Pay(%)"
-                        ]
-                        cleaned_body = []
-                        for r in data[2:]:
-                            if len(r) >= 9: cleaned_body.append(r[:9])
-                            else: cleaned_body.append(r)
-
-                        df_table = pd.DataFrame(cleaned_body)
-                        if df_table.shape[1] == 9: df_table.columns = headers
-                        
-                        for col in df_table.columns:
-                            if "Satış" in str(col) or "Pay" in str(col):
-                                try:
-                                    df_table[col] = df_table[col].astype(str).str.replace('.', '', regex=False).str.replace(',', '.', regex=False)
-                                    df_table[col] = pd.to_numeric(df_table[col], errors='coerce').fillna(0)
-                                except: pass
-                        
-                        sehir_tablolari[current_city] = df_table
-                    
-                    current_city = None
-        return sehir_tablolari
-
-    except Exception as e:
-        st.error(f"Word okuma hatası: {e}")
-        return None
-
 def main():
     # --- VERİ ÇEKME ---
     df, target_date_col = load_data(SABIT_DOSYA_ADI)
-    word_data = load_word_tables_robust(WORD_DOSYA_ADI)
     
     if df is None:
         st.error(f"❌ HATA: '{SABIT_DOSYA_ADI}' bulunamadı.")
@@ -164,6 +84,10 @@ def main():
 
     # --- SIDEBAR ---
     with st.sidebar:
+        # 1. Bilgi Notu (En Üstte)
+        st.info("🕒 Not: Veriler her gün saat 10:00'da yenilenmektedir.")
+        st.markdown("---")
+
         st.title("🔍 Filtre Paneli")
         all_cities = sorted(df['İl'].unique().tolist())
         selected_cities = st.multiselect("🏢 Şehir Seç", all_cities)
@@ -180,7 +104,17 @@ def main():
         all_risks = sorted(df['Risk_Durumu'].unique().tolist())
         selected_risks = st.multiselect("⚠️ Risk Durumu", all_risks)
         
-        st.info(f"Excel Kayıt: {len(df)}")
+        st.caption(f"Kayıt Sayısı: {len(df)}")
+        
+        # 2. Linkler ve İletişim (En Altta)
+        st.markdown("---")
+        st.header("🔗 Rapor Bağlantıları")
+        st.markdown("⛽ [Akaryakıt Lisans Raporu](https://akartakip.streamlit.app/)")
+        st.markdown("📊 [EPDK Sektör Raporu](https://pazarpayi.streamlit.app/)")
+        
+        st.markdown("---")
+        st.header("📧 İletişim")
+        st.info("kerim.aksu@milangaz.com.tr")
 
     # --- FİLTRELEME ---
     df_filtered = df.copy()
@@ -198,9 +132,9 @@ def main():
     c4.metric("Ort. Kalan Gün", f"{df_filtered['Kalan_Gun'].mean():.0f}")
     st.divider()
 
-    # --- SEKMELER ---
-    tab_risk, tab_detay, tab_market, tab_trend, tab_epdk, tab_data = st.tabs([
-        "⚡ Sözleşme & Risk", "🔢 Detaylı Bayi", "🏢 Pazar & Rekabet", "📈 Zaman Analizi", "📄 EPDK Satış Raporu", "📋 Ham Veri"
+    # --- SEKMELER (EPDK ve Ham Veri Kaldırıldı) ---
+    tab_risk, tab_detay, tab_market, tab_trend = st.tabs([
+        "⚡ Sözleşme & Risk", "🔢 Detaylı Bayi", "🏢 Pazar & Rekabet", "📈 Zaman Analizi"
     ])
 
     # 1. RİSK TABLOSU
@@ -232,39 +166,21 @@ def main():
                 use_container_width=True
             )
 
-    # 2. DETAY (DÜZELTİLDİ: GRAFİK YUKARIDAN AŞAĞIYA DOĞRU SIRALANDI)
+    # 2. DETAY (Grafikler Kaldırıldı, Sadece Tablo)
     with tab_detay:
+        st.subheader("📊 Bayi Dağılım Listesi")
         if not selected_companies:
-            # Senaryo 1: Şirket Seçili Değilse
+            # Şirket Seçili Değilse: Dağıtıcı Bazlı Liste
             comp_stats = df_filtered['Dağıtım Şirketi'].value_counts().reset_index()
             comp_stats.columns = ['Şirket', 'Toplam Bayi']
             comp_stats.index = np.arange(1, len(comp_stats) + 1)
-            
-            c_d1, c_d2 = st.columns(2)
-            with c_d1: 
-                # Tablo (Büyükten küçüğe)
-                st.dataframe(comp_stats, use_container_width=True, height=600)
-            with c_d2: 
-                # Grafik (En Büyük En Üstte Olacak Şekilde)
-                fig_comp = px.bar(comp_stats.head(30), x='Toplam Bayi', y='Şirket', orientation='h', height=600, text='Toplam Bayi')
-                # "total ascending": Plotly yatay barda "toplam artan" dediğimizde, en küçüğü alta, en büyüğü üste koyar.
-                fig_comp.update_layout(yaxis={'categoryorder':'total ascending'})
-                st.plotly_chart(fig_comp, use_container_width=True)
+            st.dataframe(comp_stats, use_container_width=True, height=600)
         else:
-            # Senaryo 2: Şirket Seçiliyse
+            # Şirket Seçiliyse: İl Bazlı Liste
             city_stats = df_filtered['İl'].value_counts().reset_index()
             city_stats.columns = ['Şehir', 'Bayi Sayısı']
             city_stats.index = np.arange(1, len(city_stats) + 1)
-            
-            c_d1, c_d2 = st.columns(2)
-            with c_d1: 
-                # Tablo (Büyükten küçüğe)
-                st.dataframe(city_stats, use_container_width=True, height=600)
-            with c_d2: 
-                # Grafik (En Büyük En Üstte Olacak Şekilde)
-                fig_city = px.bar(city_stats, x='Bayi Sayısı', y='Şehir', orientation='h', height=600, text='Bayi Sayısı')
-                fig_city.update_layout(yaxis={'categoryorder':'total ascending'})
-                st.plotly_chart(fig_city, use_container_width=True)
+            st.dataframe(city_stats, use_container_width=True, height=600)
 
     # 3. PAZAR
     with tab_market:
@@ -279,16 +195,14 @@ def main():
             fig.add_annotation(text=f"{tot}", x=0.5, y=0.5, font_size=20, showarrow=False)
             st.plotly_chart(fig, use_container_width=True)
 
-    # 4. ZAMAN ANALİZİ (AÇIKLAMA EKLENDİ)
+    # 4. ZAMAN ANALİZİ
     with tab_trend:
         st.subheader("📈 Yıllık Yeni Bayi Girişi ve Trendler")
         
-        # Açıklama Metni
         st.markdown("""
         <div style="background-color: #e8f4f8; padding: 15px; border-radius: 5px; margin-bottom: 20px; border-left: 5px solid #3498db;">
             <strong>ℹ️ Analiz Bilgisi:</strong><br>
             Bu grafik, <strong>yıllara göre sisteme yeni katılan (lisans alan) bayi sayılarını</strong> göstermektedir. 
-            Pazarın hangi yıllarda hızlı büyüdüğünü veya durgunlaştığını, dağıtım şirketleri ile yapılan yeni sözleşme trendlerini buradan takip edebilirsiniz.
         </div>
         """, unsafe_allow_html=True)
 
@@ -298,41 +212,6 @@ def main():
             yg = dy['Yil'].value_counts().sort_index().reset_index()
             yg.columns=['Yıl','Yeni Bayi']
             st.plotly_chart(px.line(yg[yg['Yıl']>=2000], x='Yıl', y='Yeni Bayi', markers=True), use_container_width=True)
-
-    # 5. EPDK RAPORU
-    with tab_epdk:
-        st.header("📄 EPDK Satış Raporları (Word)")
-        
-        if word_data:
-            sehirler = sorted(list(word_data.keys()))
-            if not sehirler:
-                st.warning("Word dosyasında 'Tablo X: Şehir' formatı bulunamadı.")
-            else:
-                secilen_il_word = st.selectbox("Raporlanacak İli Seçin:", sehirler)
-                if secilen_il_word:
-                    tablo_df = word_data[secilen_il_word]
-                    st.markdown(f"### 📍 {secilen_il_word} İli LPG Satış Tablosu")
-                    
-                    # İndeksi 1'den başlat
-                    tablo_df.index = np.arange(1, len(tablo_df) + 1)
-                    
-                    try:
-                        st.dataframe(
-                            tablo_df.style.format(precision=2).background_gradient(cmap="Blues", subset=["Toplam Satış(ton)"]),
-                            use_container_width=True, height=600
-                        )
-                    except:
-                        st.dataframe(tablo_df, use_container_width=True, height=600)
-                        
-                    if "Toplam Satış(ton)" in tablo_df.columns and "Lisans Sahibinin Unvanı" in tablo_df.columns:
-                        gd = tablo_df[tablo_df["Lisans Sahibinin Unvanı"] != "TOPLAM"].sort_values("Toplam Satış(ton)", ascending=True).tail(15)
-                        st.plotly_chart(px.bar(gd, x="Toplam Satış(ton)", y="Lisans Sahibinin Unvanı", orientation='h', text="Toplam Satış(ton)", title="En Çok Satış Yapanlar"), use_container_width=True)
-        else:
-            st.error("Word dosyası okunamadı.")
-
-    # 6. HAM VERİ
-    with tab_data:
-        st.dataframe(df_filtered, use_container_width=True)
 
 if __name__ == "__main__":
     main()
