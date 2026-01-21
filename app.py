@@ -33,28 +33,27 @@ def load_data(file_path):
     if not os.path.exists(file_path): return None
     try:
         df = pd.read_excel(file_path)
-        # Sütun isimlerini temizle (boşlukları al)
+        # Sütun isimlerinin başındaki/sonundaki gizli boşlukları temizle
         df.columns = [str(c).strip() for c in df.columns]
         
-        # Sütunları Bulmak İçin Yardımcı Fonksiyon
         def find_col(keywords):
             for k in keywords:
                 for col in df.columns:
                     if k.lower() in col.lower(): return col
             return None
 
-        # --- SENİN TABLONA GÖRE EŞLEŞTİRME ---
+        # --- EXCEL'DEKİ TAM İSİMLERLE SÜTUNLARI EŞLEŞTİRME ---
         col_unvan = find_col(['Unvan', 'Lisans Sahibi', 'Bayi Adı'])
         col_adres = find_col(['Adres', 'İletişim Adresi'])
         col_il = find_col(['İl', 'Şehir'])
         col_ilce = find_col(['İlçe', 'Bucak'])
         col_dagitici = find_col(['Dağıtıcı', 'Dağıtım Şirketi'])
         
-        # Ekran görüntüsündeki özel isimleri öncelikli arıyoruz
-        col_baslangic = find_col(['Dağıtıcı ile Yapılan Sözleşme Başlangıç', 'Sözleşme Başlangıç', 'Başlangıç Tarihi'])
-        col_bitis = find_col(['Dağıtıcı ile Yapılan Sözleşme Bitiş', 'Sözleşme Bitiş', 'Bitiş Tarihi'])
+        # RESİMDEKİ TAM SÜTUN İSİMLERİNİ BURAYA EKLEDİM:
+        col_baslangic = find_col(['Dağıtıcı ile Yapılan Sözleşme Başlangıç Tarihi', 'Başlangıç Tarihi'])
+        col_bitis = find_col(['Dağıtıcı ile Yapılan Sözleşme Bitiş Tarihi', 'Bitiş Tarihi'])
 
-        # Tarih Formatlama
+        # Tarih Formatlama İşlemleri
         today = pd.to_datetime(datetime.date.today())
         
         for c in [col_baslangic, col_bitis]:
@@ -69,7 +68,7 @@ def load_data(file_path):
         if col_il:
             df[col_il] = df[col_il].astype(str).str.upper().str.replace('i', 'İ').str.replace('ı', 'I')
 
-        # GEREKLİ SÜTUNLARI AL VE İSİMLENDİR
+        # KULLANILACAK SÜTUNLARI AL VE RAPOR İÇİN YENİDEN İSİMLENDİR
         cols_to_keep = {}
         if col_unvan: cols_to_keep[col_unvan] = 'Unvan'
         if col_dagitici: cols_to_keep[col_dagitici] = 'Dağıtıcı'
@@ -79,7 +78,7 @@ def load_data(file_path):
         if col_baslangic: cols_to_keep[col_baslangic] = 'Başlangıç Tarihi'
         if col_bitis: cols_to_keep[col_bitis] = 'Bitiş Tarihi'
         
-        # Yeni dataframe oluştur
+        # Sadece seçili sütunları barındıran final dataframe'i oluştur
         final_df = df[list(cols_to_keep.keys()) + (['Kalan_Gun', 'Yil'] if col_bitis else [])].copy()
         final_df.rename(columns=cols_to_keep, inplace=True)
         
@@ -100,7 +99,6 @@ def main():
     # --- FİLTRE PANELİ (ÜST KISIM) ---
     st.markdown("### 🔍 Arama Kriterleri")
     
-    # 4 Kolonlu Filtre Yapısı
     c1, c2, c3, c4 = st.columns(4)
 
     # 1. YIL FİLTRESİ
@@ -116,11 +114,10 @@ def main():
         bolgeler = ["Tümü"] + list(BOLGE_TANIMLARI.keys())
         secilen_bolge = st.selectbox("🌍 Bölge", bolgeler)
 
-    # 3. İL FİLTRESİ (Bölgeye göre değişir)
+    # 3. İL FİLTRESİ
     with c3:
         if secilen_bolge != "Tümü":
             filtre_iller = BOLGE_TANIMLARI[secilen_bolge]
-            # Sadece veride olan illeri göster
             mevcut_iller = sorted(df[df['İl'].isin(filtre_iller)]['İl'].unique())
         else:
             mevcut_iller = sorted(df['İl'].unique()) if 'İl' in df.columns else []
@@ -162,7 +159,7 @@ def main():
         # İstenen sütun sırası
         ideal_sira = ['Unvan', 'Adres', 'İl', 'İlçe', 'Başlangıç Tarihi', 'Bitiş Tarihi', 'Kalan_Gun', 'Dağıtıcı']
         
-        # Sadece veride gerçekten var olanları seç (Hata almamak için)
+        # Sadece veride var olanları seç
         final_cols = [c for c in ideal_sira if c in filtreli_df.columns]
         gosterim_df = filtreli_df[final_cols].copy()
 
@@ -176,7 +173,7 @@ def main():
             gosterim_df,
             use_container_width=True,
             hide_index=True,
-            height=600, # Tablo yüksekliği
+            height=600,
             column_config={
                 "Kalan_Gun": st.column_config.NumberColumn(
                     "Kalan Gün",
