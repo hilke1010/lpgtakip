@@ -4,7 +4,6 @@ import plotly.express as px
 import datetime
 import numpy as np
 import os
-import io
 
 # --- 1. SAYFA AYARLARI ---
 st.set_page_config(page_title="EPDK LPG Analiz", layout="wide")
@@ -17,7 +16,7 @@ MY_COMPANY = "LİKİTGAZ DAĞITIM VE ENDÜSTRİ ANONİM ŞİRKETİ"
 if 'notlar_df' not in st.session_state:
     st.session_state.notlar_df = pd.DataFrame(columns=['Unvan', 'Özel Not Ekle'])
 
-# --- 3. BÖLGE TANIMLARI (Senin 18 İllik Listen) ---
+# --- 3. BÖLGE TANIMLARI ---
 BOLGE_TANIMLARI = {
     "Marmara Bölgesi": [
         "İSTANBUL", "BALIKESİR", "BURSA", "SAKARYA", "EDİRNE", 
@@ -79,13 +78,20 @@ def main():
     # --- GENEL SİDEBAR FİLTRESİ ---
     with st.sidebar:
         st.header("🔍 Genel Filtre Paneli")
+        st.info("Burada yapılan seçimler TÜM sekmeleri etkiler.")
+        
+        # 1. Bölge Seçimi
         sel_region = st.selectbox("🌍 Genel Bölge Seç", ["Tümü"] + list(BOLGE_TANIMLARI.keys()))
         
+        # general_df: Sidebar seçimlerine göre filtrelenmiş ANA veri
         general_df = df_raw.copy()
         if sel_region != "Tümü":
             general_df = general_df[general_df['İl'].isin(BOLGE_TANIMLARI[sel_region])]
 
-        sel_cities = st.multiselect("🏢 Genel Şehir Seç", sorted(general_df['İl'].unique().tolist()))
+        # 2. Şehir Seçimi (Seçilen bölgeye göre daralır)
+        available_cities = sorted(general_df['İl'].unique().tolist())
+        sel_cities = st.multiselect("🏢 Genel Şehir Seç", available_cities)
+        
         if sel_cities:
             general_df = general_df[general_df['İl'].isin(sel_cities)]
 
@@ -93,46 +99,35 @@ def main():
     
     tabs = st.tabs(["📊 Bölgesel Analiz", "📅 Takvim", "📋 LİKİTGAZ SÖZLEŞME TAKİBİ", "📡 Radar"])
 
-    # --- LİKİTGAZ SÖZLEŞME TAKİBİ (ÖZEL FİLTRELİ SEKME) ---
+    # --- LİKİTGAZ SÖZLEŞME TAKİBİ ---
     with tabs[2]:
-        st.subheader(f"📋 {MY_COMPANY} Özel Takip Alanı")
+        st.subheader(f"📋 {MY_COMPANY} Sözleşme Takip")
         
-        # --- SEKME İÇİ ÖZEL FİLTRELEME ---
-        st.markdown("#### 🎯 Bu Tabloya Özel Filtre")
-        col_f1, col_f2, col_f3 = st.columns(3)
+        # ÖNEMLİ DEĞİŞİKLİK BURADA:
+        # Veriyi df_raw'dan değil, Sidebar ile filtrelenmiş 'general_df'den alıyoruz.
+        likit_base = general_df[general_df['Dağıtım Şirketi'] == MY_COMPANY].copy()
         
-        with col_f1:
-            # Sekmeye özel Bölge Filtresi
-            tab_region = st.selectbox("📍 Bölge (Sadece Bu Tablo)", ["Tümü"] + list(BOLGE_TANIMLARI.keys()), key="tab_reg_sb")
-        
-        # Likitgaz verisini hazırla
-        likit_base = df_raw[df_raw['Dağıtım Şirketi'] == MY_COMPANY].copy()
-        
-        # Bölgeye göre daralt
-        if tab_region != "Tümü":
-            likit_base = likit_base[likit_base['İl'].isin(BOLGE_TANIMLARI[tab_region])]
-        
-        with col_f2:
-            # Sekmeye özel Şehir Filtresi
-            tab_cities = st.multiselect("🏙️ Şehir (Sadece Bu Tablo)", sorted(likit_base['İl'].unique().tolist()), key="tab_city_ms")
-            if tab_cities:
-                likit_base = likit_base[likit_base['İl'].isin(tab_cities)]
-        
-        with col_f3:
-            # Yıl Filtresi
+        # Ekstra sadece YIL filtresi koyuyoruz (Bölge/Şehir zaten soldan geliyor)
+        col_y1, col_y2 = st.columns([1, 3])
+        with col_y1:
             l_yrs = sorted(likit_base['Bitis_Yili'].dropna().unique().astype(int).tolist())
-            tab_yr = st.selectbox("📅 Bitiş Yılı", ["Tümü"] + l_yrs, key="tab_yr_sb")
-            if tab_yr != "Tümü":
+            if not l_yrs:
+                tab_yr = "Veri Yok"
+            else:
+                tab_yr = st.selectbox("📅 Bitiş Yılı Filtrele", ["Tümü"] + l_yrs, key="tab_yr_sb")
+            
+            if tab_yr != "Tümü" and tab_yr != "Veri Yok":
                 likit_base = likit_base[likit_base['Bitis_Yili'] == tab_yr]
 
+        st.markdown(f"**Seçili Filtrelere Göre Bayi Sayısı:** `{len(likit_base)}`")
         st.divider()
 
         # Tabloyu Göster
         if likit_base.empty:
-            st.warning("Seçtiğiniz özel filtre kriterlerinde Likitgaz bayisi bulunamadı.")
+            st.warning("Sol menüdeki filtrelere uygun Likitgaz bayisi bulunamadı.")
         else:
             # Sütunları seç
-            display_cols = ['Unvan']
+            display_cols = ['Unvan', 'İl'] # İli de ekledim görmek için
             if adres_col: display_cols.append(adres_col)
             if baslangic_col: display_cols.append(baslangic_col)
             if bitis_col: display_cols.append(bitis_col)
@@ -155,23 +150,47 @@ def main():
             # İNTERAKTİF EDİTÖR
             edited = st.data_editor(
                 final_table,
-                column_config={"Özel Not Ekle": st.column_config.TextColumn("Özel Not (Çift tıkla yaz)", width="large")},
+                column_config={
+                    "Özel Not Ekle": st.column_config.TextColumn("Özel Not (Çift tıkla yaz)", width="large"),
+                    "Kalan_Gun": st.column_config.NumberColumn("Kalan Gün", help="Sözleşme bitimine kalan gün")
+                },
                 disabled=[c for c in final_table.columns if c != "Özel Not Ekle"],
                 hide_index=True, use_container_width=True, key="likit_data_editor"
             )
             
             if st.button("📝 Notları Kalıcı Olarak Kaydet"):
-                st.session_state.notlar_df = edited[['Unvan', 'Özel Not Ekle']]
+                # Sadece dolu olan veya değişmiş notları alıp session state'i güncelle
+                # Basit yöntem: Editörden gelen tüm not sütununu state'e atarız
+                current_notes = edited[['Unvan', 'Özel Not Ekle']]
+                
+                # Mevcut notlar ile yeni notları birleştir (update mantığı)
+                # Önce eski state'deki bu unvanları çıkar, yenileri ekle
+                merged_notes = pd.concat([st.session_state.notlar_df, current_notes]).drop_duplicates(subset='Unvan', keep='last')
+                st.session_state.notlar_df = merged_notes
+                
                 st.success("Notlar bu oturum için kaydedildi!")
 
-    # --- DİĞER SEKMELER (GENEL FİLTREYİ KULLANIR) ---
+    # --- DİĞER SEKMELER (Zaten general_df kullanıyordu) ---
     with tabs[0]:
         st.subheader("📊 Genel Bölgesel Analiz")
-        city_counts = general_df['İl'].value_counts().reset_index().head(20)
-        city_counts.columns = ['İl', 'Adet']
-        fig = px.bar(city_counts, x='İl', y='Adet', text='Adet', color='Adet', title="En Çok İstasyon Olan İller")
-        fig.update_traces(textposition='outside')
-        st.plotly_chart(fig, use_container_width=True)
+        if general_df.empty:
+            st.warning("Veri yok.")
+        else:
+            city_counts = general_df['İl'].value_counts().reset_index().head(20)
+            city_counts.columns = ['İl', 'Adet']
+            fig = px.bar(city_counts, x='İl', y='Adet', text='Adet', color='Adet', title="Filtrelenen Bölgedeki İstasyonlar")
+            fig.update_traces(textposition='outside')
+            st.plotly_chart(fig, use_container_width=True)
+
+    with tabs[1]:
+        st.subheader("📅 Sözleşme Bitiş Takvimi (Genel)")
+        # Burada da general_df kullanarak filtrelerin işlemesini sağladık
+        if 'Bitis_Yili' in general_df.columns:
+            takvim_df = general_df.groupby('Bitis_Yili').size().reset_index(name='Bayi Sayısı')
+            fig_cal = px.bar(takvim_df, x='Bitis_Yili', y='Bayi Sayısı', title="Yıllara Göre Bitecek Sözleşmeler")
+            st.plotly_chart(fig_cal, use_container_width=True)
+        else:
+            st.warning("Tarih verisi bulunamadı.")
 
 if __name__ == "__main__":
     main()
