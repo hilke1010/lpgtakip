@@ -1,20 +1,13 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import datetime
-import numpy as np
 import os
 
 # --- 1. SAYFA AYARLARI ---
-st.set_page_config(page_title="EPDK LPG Analiz", layout="wide")
+st.set_page_config(page_title="Sözleşme Takip Raporu", layout="wide")
 
 # --- 2. SABİTLER ---
 SABIT_DOSYA_ADI = "lpg.xlsx"
-MY_COMPANY = "LİKİTGAZ DAĞITIM VE ENDÜSTRİ ANONİM ŞİRKETİ"
-
-# --- NOTLAR İÇİN SESSION STATE ---
-if 'notlar_df' not in st.session_state:
-    st.session_state.notlar_df = pd.DataFrame(columns=['Unvan', 'Özel Not Ekle'])
 
 # --- 3. BÖLGE TANIMLARI ---
 BOLGE_TANIMLARI = {
@@ -26,171 +19,176 @@ BOLGE_TANIMLARI = {
         "ANKARA", "KONYA", "KAYSERİ", "ESKİŞEHİR", "YOZGAT", "KASTAMONU", 
         "ZONGULDAK", "KARABÜK", "KIRIKKALE", "AFYONKARAHİSAR", "KIRŞEHİR", 
         "NİĞDE", "NEVŞEHİR", "ÇANKIRI", "AKSARAY", "DÜZCE", "BOLU", "BARTIN"
-    ]
+    ],
+    "Ege Bölgesi": ["İZMİR", "MANİSA", "AYDIN", "DENİZLİ", "MUĞLA", "AFYONKARAHİSAR", "KÜTAHYA", "UŞAK"],
+    "Akdeniz Bölgesi": ["ADANA", "ANTALYA", "BURDUR", "HATAY", "ISPARTA", "MERSİN", "KAHRAMANMARAŞ", "OSMANİYE"],
+    "Karadeniz Bölgesi": ["AMASYA", "ARTVİN", "BOLU", "ÇORUM", "GİRESUN", "GÜMÜŞHANE", "KASTAMONU", "ORDU", "RİZE", "SAMSUN", "SİNOP", "TOKAT", "TRABZON", "ZONGULDAK", "BAYBURT", "BARTIN", "KARABÜK", "DÜZCE"],
+    "Doğu Anadolu": ["AĞRI", "BİNGÖL", "BİTLİS", "ELAZIĞ", "ERZİNCAN", "ERZURUM", "HAKKARİ", "KARS", "MALATYA", "MUŞ", "TUNCELİ", "VAN", "ARDAHAN", "IĞDIR"],
+    "Güneydoğu Anadolu": ["ADIYAMAN", "DİYARBAKIR", "GAZİANTEP", "KİLİS", "MARDİN", "SİİRT", "ŞANLIURFA", "BATMAN", "ŞIRNAK"]
 }
 
-# --- 4. VERİ YÜKLEME ---
+# --- 4. VERİ YÜKLEME VE İŞLEME ---
 @st.cache_data
 def load_data(file_path):
-    if not os.path.exists(file_path): return None, None, None, None
+    if not os.path.exists(file_path): return None
     try:
         df = pd.read_excel(file_path)
+        # Sütun isimlerini temizle (boşlukları al)
         df.columns = [str(c).strip() for c in df.columns]
         
+        # Sütunları Bulmak İçin Yardımcı Fonksiyon
         def find_col(keywords):
             for k in keywords:
                 for col in df.columns:
                     if k.lower() in col.lower(): return col
             return None
 
-        dagitici_col = find_col(['Dağıtım Şirketi', 'Dağıtıcı'])
-        if dagitici_col: df.rename(columns={dagitici_col: 'Dağıtım Şirketi'}, inplace=True)
+        # --- SENİN TABLONA GÖRE EŞLEŞTİRME ---
+        col_unvan = find_col(['Unvan', 'Lisans Sahibi', 'Bayi Adı'])
+        col_adres = find_col(['Adres', 'İletişim Adresi'])
+        col_il = find_col(['İl', 'Şehir'])
+        col_ilce = find_col(['İlçe', 'Bucak'])
+        col_dagitici = find_col(['Dağıtıcı', 'Dağıtım Şirketi'])
         
-        bitis_col = find_col(['Bitiş Tarihi', 'Lisans Bitiş', 'Sözleşme Bitiş'])
-        baslangic_col = find_col(['Başlangıç Tarihi', 'Lisans Başlangıç', 'Sözleşme Başlangıç'])
-        adres_col = find_col(['İletişim Adresi', 'Adres'])
+        # Ekran görüntüsündeki özel isimleri öncelikli arıyoruz
+        col_baslangic = find_col(['Dağıtıcı ile Yapılan Sözleşme Başlangıç', 'Sözleşme Başlangıç', 'Başlangıç Tarihi'])
+        col_bitis = find_col(['Dağıtıcı ile Yapılan Sözleşme Bitiş', 'Sözleşme Bitiş', 'Bitiş Tarihi'])
 
-        for col in [bitis_col, baslangic_col]:
-            if col: df[col] = pd.to_datetime(df[col], dayfirst=True, errors='coerce')
-
+        # Tarih Formatlama
         today = pd.to_datetime(datetime.date.today())
-        if bitis_col:
-            df['Kalan_Gun'] = (df[bitis_col] - today).dt.days
-            df['Bitis_Yili'] = df[bitis_col].dt.year
-            df['Bitis_Ayi_No'] = df[bitis_col].dt.month
-            month_map = {1:'Ocak', 2:'Şubat', 3:'Mart', 4:'Nisan', 5:'Mayıs', 6:'Haziran', 
-                         7:'Temmuz', 8:'Ağustos', 9:'Eylül', 10:'Ekim', 11:'Kasım', 12:'Aralık'}
-            df['Bitis_Ayi'] = df['Bitis_Ayi_No'].map(month_map)
         
-        if 'İl' in df.columns:
-            df['İl'] = df['İl'].astype(str).str.upper().str.replace('i', 'İ').str.replace('ı', 'I')
-            
-        return df, bitis_col, baslangic_col, adres_col
-    except Exception as e: return None, str(e), None, None
+        for c in [col_baslangic, col_bitis]:
+            if c: df[c] = pd.to_datetime(df[c], dayfirst=True, errors='coerce')
 
-# --- ANA UYGULAMA ---
+        # Kalan Gün Hesapla
+        if col_bitis:
+            df['Kalan_Gun'] = (df[col_bitis] - today).dt.days
+            df['Yil'] = df[col_bitis].dt.year
+        
+        # İli standartlaştır (Büyük harf ve Türkçe karakter)
+        if col_il:
+            df[col_il] = df[col_il].astype(str).str.upper().str.replace('i', 'İ').str.replace('ı', 'I')
+
+        # GEREKLİ SÜTUNLARI AL VE İSİMLENDİR
+        cols_to_keep = {}
+        if col_unvan: cols_to_keep[col_unvan] = 'Unvan'
+        if col_dagitici: cols_to_keep[col_dagitici] = 'Dağıtıcı'
+        if col_adres: cols_to_keep[col_adres] = 'Adres'
+        if col_il: cols_to_keep[col_il] = 'İl'
+        if col_ilce: cols_to_keep[col_ilce] = 'İlçe'
+        if col_baslangic: cols_to_keep[col_baslangic] = 'Başlangıç Tarihi'
+        if col_bitis: cols_to_keep[col_bitis] = 'Bitiş Tarihi'
+        
+        # Yeni dataframe oluştur
+        final_df = df[list(cols_to_keep.keys()) + (['Kalan_Gun', 'Yil'] if col_bitis else [])].copy()
+        final_df.rename(columns=cols_to_keep, inplace=True)
+        
+        return final_df
+    except Exception as e:
+        st.error(f"Veri okunurken hata oluştu: {e}")
+        return None
+
+# --- 5. ANA EKRAN ---
 def main():
-    df_raw, bitis_col, baslangic_col, adres_col = load_data(SABIT_DOSYA_ADI)
-    if df_raw is None:
-        st.error("Veri dosyası (lpg.xlsx) bulunamadı!")
+    st.title("📋 Sözleşme Takip Raporu")
+    
+    df = load_data(SABIT_DOSYA_ADI)
+    if df is None:
+        st.error(f"'{SABIT_DOSYA_ADI}' dosyası klasörde bulunamadı.")
         st.stop()
 
-    # --- GENEL SİDEBAR FİLTRESİ ---
-    with st.sidebar:
-        st.header("🔍 Genel Filtre Paneli")
-        st.info("Burada yapılan seçimler TÜM sekmeleri etkiler.")
-        
-        # 1. Bölge Seçimi
-        sel_region = st.selectbox("🌍 Genel Bölge Seç", ["Tümü"] + list(BOLGE_TANIMLARI.keys()))
-        
-        # general_df: Sidebar seçimlerine göre filtrelenmiş ANA veri
-        general_df = df_raw.copy()
-        if sel_region != "Tümü":
-            general_df = general_df[general_df['İl'].isin(BOLGE_TANIMLARI[sel_region])]
-
-        # 2. Şehir Seçimi (Seçilen bölgeye göre daralır)
-        available_cities = sorted(general_df['İl'].unique().tolist())
-        sel_cities = st.multiselect("🏢 Genel Şehir Seç", available_cities)
-        
-        if sel_cities:
-            general_df = general_df[general_df['İl'].isin(sel_cities)]
-
-    st.title("🚀 LPG Pazar & Sözleşme Analizi")
+    # --- FİLTRE PANELİ (ÜST KISIM) ---
+    st.markdown("### 🔍 Arama Kriterleri")
     
-    tabs = st.tabs(["📊 Bölgesel Analiz", "📅 Takvim", "📋 LİKİTGAZ SÖZLEŞME TAKİBİ", "📡 Radar"])
+    # 4 Kolonlu Filtre Yapısı
+    c1, c2, c3, c4 = st.columns(4)
 
-    # --- LİKİTGAZ SÖZLEŞME TAKİBİ ---
-    with tabs[2]:
-        st.subheader(f"📋 {MY_COMPANY} Sözleşme Takip")
+    # 1. YIL FİLTRESİ
+    with c1:
+        if 'Yil' in df.columns:
+            yillar = sorted(df['Yil'].dropna().astype(int).unique())
+            secilen_yil = st.selectbox("📅 Bitiş Yılı", ["Tümü"] + yillar)
+        else:
+            secilen_yil = "Tümü"
+
+    # 2. BÖLGE FİLTRESİ
+    with c2:
+        bolgeler = ["Tümü"] + list(BOLGE_TANIMLARI.keys())
+        secilen_bolge = st.selectbox("🌍 Bölge", bolgeler)
+
+    # 3. İL FİLTRESİ (Bölgeye göre değişir)
+    with c3:
+        if secilen_bolge != "Tümü":
+            filtre_iller = BOLGE_TANIMLARI[secilen_bolge]
+            # Sadece veride olan illeri göster
+            mevcut_iller = sorted(df[df['İl'].isin(filtre_iller)]['İl'].unique())
+        else:
+            mevcut_iller = sorted(df['İl'].unique()) if 'İl' in df.columns else []
+            
+        secilen_iller = st.multiselect("🏙️ İl", mevcut_iller)
+
+    # 4. DAĞITICI FİLTRESİ
+    with c4:
+        if 'Dağıtıcı' in df.columns:
+            dagiticilar = sorted(df['Dağıtıcı'].astype(str).unique())
+            secilen_dagitici = st.multiselect("⛽ Dağıtıcı", dagiticilar)
+        else:
+            secilen_dagitici = []
+
+    # --- FİLTRELEME İŞLEMİ ---
+    filtreli_df = df.copy()
+
+    # Yıl uygula
+    if secilen_yil != "Tümü":
+        filtreli_df = filtreli_df[filtreli_df['Yil'] == secilen_yil]
+
+    # Bölge uygula
+    if secilen_bolge != "Tümü":
+        filtreli_df = filtreli_df[filtreli_df['İl'].isin(BOLGE_TANIMLARI[secilen_bolge])]
+
+    # İl uygula
+    if secilen_iller:
+        filtreli_df = filtreli_df[filtreli_df['İl'].isin(secilen_iller)]
+
+    # Dağıtıcı uygula
+    if secilen_dagitici:
+        filtreli_df = filtreli_df[filtreli_df['Dağıtıcı'].isin(secilen_dagitici)]
+
+    # --- SONUÇ TABLOSU ---
+    st.divider()
+    st.subheader(f"📄 Sonuçlar: {len(filtreli_df)} Kayıt")
+    
+    if not filtreli_df.empty:
+        # İstenen sütun sırası
+        ideal_sira = ['Unvan', 'Adres', 'İl', 'İlçe', 'Başlangıç Tarihi', 'Bitiş Tarihi', 'Kalan_Gun', 'Dağıtıcı']
         
-        # ÖNEMLİ DEĞİŞİKLİK BURADA:
-        # Veriyi df_raw'dan değil, Sidebar ile filtrelenmiş 'general_df'den alıyoruz.
-        likit_base = general_df[general_df['Dağıtım Şirketi'] == MY_COMPANY].copy()
-        
-        # Ekstra sadece YIL filtresi koyuyoruz (Bölge/Şehir zaten soldan geliyor)
-        col_y1, col_y2 = st.columns([1, 3])
-        with col_y1:
-            l_yrs = sorted(likit_base['Bitis_Yili'].dropna().unique().astype(int).tolist())
-            if not l_yrs:
-                tab_yr = "Veri Yok"
-            else:
-                tab_yr = st.selectbox("📅 Bitiş Yılı Filtrele", ["Tümü"] + l_yrs, key="tab_yr_sb")
-            
-            if tab_yr != "Tümü" and tab_yr != "Veri Yok":
-                likit_base = likit_base[likit_base['Bitis_Yili'] == tab_yr]
+        # Sadece veride gerçekten var olanları seç (Hata almamak için)
+        final_cols = [c for c in ideal_sira if c in filtreli_df.columns]
+        gosterim_df = filtreli_df[final_cols].copy()
 
-        st.markdown(f"**Seçili Filtrelere Göre Bayi Sayısı:** `{len(likit_base)}`")
-        st.divider()
+        # Tarihleri güzelleştir (Gün.Ay.Yıl formatı)
+        for col in ['Başlangıç Tarihi', 'Bitiş Tarihi']:
+            if col in gosterim_df.columns:
+                gosterim_df[col] = gosterim_df[col].dt.strftime('%d.%m.%Y')
 
-        # Tabloyu Göster
-        if likit_base.empty:
-            st.warning("Sol menüdeki filtrelere uygun Likitgaz bayisi bulunamadı.")
-        else:
-            # Sütunları seç
-            display_cols = ['Unvan', 'İl'] # İli de ekledim görmek için
-            if adres_col: display_cols.append(adres_col)
-            if baslangic_col: display_cols.append(baslangic_col)
-            if bitis_col: display_cols.append(bitis_col)
-            if 'Kalan_Gun' in likit_base.columns: display_cols.append('Kalan_Gun')
-
-            final_table = likit_base[display_cols].copy()
-            
-            # Başlıkları Türkçeleştir
-            renames = {adres_col: 'Adres', baslangic_col: 'Başlangıç', bitis_col: 'Bitiş'}
-            final_table.rename(columns={k:v for k,v in renames.items() if k in final_table.columns}, inplace=True)
-            
-            # Tarihleri formatla
-            for c in ['Başlangıç', 'Bitiş']:
-                if c in final_table.columns:
-                    final_table[c] = pd.to_datetime(final_table[c]).dt.strftime('%d.%m.%Y')
-
-            # Notları Session State ile eşleştir
-            final_table = pd.merge(final_table, st.session_state.notlar_df, on='Unvan', how='left').fillna("")
-
-            # İNTERAKTİF EDİTÖR
-            edited = st.data_editor(
-                final_table,
-                column_config={
-                    "Özel Not Ekle": st.column_config.TextColumn("Özel Not (Çift tıkla yaz)", width="large"),
-                    "Kalan_Gun": st.column_config.NumberColumn("Kalan Gün", help="Sözleşme bitimine kalan gün")
-                },
-                disabled=[c for c in final_table.columns if c != "Özel Not Ekle"],
-                hide_index=True, use_container_width=True, key="likit_data_editor"
-            )
-            
-            if st.button("📝 Notları Kalıcı Olarak Kaydet"):
-                # Sadece dolu olan veya değişmiş notları alıp session state'i güncelle
-                # Basit yöntem: Editörden gelen tüm not sütununu state'e atarız
-                current_notes = edited[['Unvan', 'Özel Not Ekle']]
-                
-                # Mevcut notlar ile yeni notları birleştir (update mantığı)
-                # Önce eski state'deki bu unvanları çıkar, yenileri ekle
-                merged_notes = pd.concat([st.session_state.notlar_df, current_notes]).drop_duplicates(subset='Unvan', keep='last')
-                st.session_state.notlar_df = merged_notes
-                
-                st.success("Notlar bu oturum için kaydedildi!")
-
-    # --- DİĞER SEKMELER (Zaten general_df kullanıyordu) ---
-    with tabs[0]:
-        st.subheader("📊 Genel Bölgesel Analiz")
-        if general_df.empty:
-            st.warning("Veri yok.")
-        else:
-            city_counts = general_df['İl'].value_counts().reset_index().head(20)
-            city_counts.columns = ['İl', 'Adet']
-            fig = px.bar(city_counts, x='İl', y='Adet', text='Adet', color='Adet', title="Filtrelenen Bölgedeki İstasyonlar")
-            fig.update_traces(textposition='outside')
-            st.plotly_chart(fig, use_container_width=True)
-
-    with tabs[1]:
-        st.subheader("📅 Sözleşme Bitiş Takvimi (Genel)")
-        # Burada da general_df kullanarak filtrelerin işlemesini sağladık
-        if 'Bitis_Yili' in general_df.columns:
-            takvim_df = general_df.groupby('Bitis_Yili').size().reset_index(name='Bayi Sayısı')
-            fig_cal = px.bar(takvim_df, x='Bitis_Yili', y='Bayi Sayısı', title="Yıllara Göre Bitecek Sözleşmeler")
-            st.plotly_chart(fig_cal, use_container_width=True)
-        else:
-            st.warning("Tarih verisi bulunamadı.")
+        # Tabloyu çiz
+        st.dataframe(
+            gosterim_df,
+            use_container_width=True,
+            hide_index=True,
+            height=600, # Tablo yüksekliği
+            column_config={
+                "Kalan_Gun": st.column_config.NumberColumn(
+                    "Kalan Gün",
+                    format="%d Gün",
+                    help="Sözleşme bitimine kalan gün sayısı"
+                ),
+                "Unvan": st.column_config.TextColumn("Bayi Unvanı", width="large"),
+                "Adres": st.column_config.TextColumn("Adres", width="medium"),
+            }
+        )
+    else:
+        st.warning("⚠️ Seçtiğiniz kriterlere uygun kayıt bulunamadı.")
 
 if __name__ == "__main__":
     main()
