@@ -2,10 +2,11 @@ import streamlit as st
 import pandas as pd
 import datetime
 import os
-s
+
 # --- 1. SAYFA AYARLARI ---
 st.set_page_config(page_title="Sözleşme Takip Raporu", layout="wide")
-dasda
+
+# --- 2. SABİTLER ---
 SABIT_DOSYA_ADI = "lpg.xlsx"
 
 # --- 3. BÖLGE TANIMLARI ---
@@ -180,5 +181,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
