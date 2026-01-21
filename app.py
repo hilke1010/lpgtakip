@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 import os
-
+s
 # --- 1. SAYFA AYARLARI ---
 st.set_page_config(page_title="Sözleşme Takip Raporu", layout="wide")
 
@@ -181,3 +181,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
